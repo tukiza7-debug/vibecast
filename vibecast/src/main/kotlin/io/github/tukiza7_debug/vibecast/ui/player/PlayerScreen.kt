@@ -95,6 +95,12 @@ fun PlayerScreen(
     var fullscreen by remember { mutableStateOf(false) }
     var seekHint by remember { mutableStateOf<String?>(null) }
 
+    // scrubbing state: the slider and the horizontal drag update a local target
+    // and seek once on release instead of firing a seek per frame
+    var scrubTargetMs by remember { mutableStateOf<Long?>(null) }
+    var dragAnchorX by remember { mutableStateOf(0f) }
+    var verticalDragMode by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(isPlaying, controlsVisible) {
         if (isPlaying && controlsVisible) {
             delay(3500)
@@ -146,19 +152,38 @@ fun PlayerScreen(
                         )
                     }
                     .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
+                        detectDragGestures(
+                            onDragStart = { offset ->
+                                dragAnchorX = offset.x
+                                verticalDragMode = null
+                            },
+                            onDragEnd = {
+                                // one seek per gesture, not one per frame
+                                scrubTargetMs?.let { target ->
+                                    viewModel.viewModelScope.launch { connection.seekTo(target) }
+                                }
+                                scrubTargetMs = null
+                            },
+                        ) { change, dragAmount ->
                             change.consume()
                             val horizontal = abs(dragAmount.x) > abs(dragAmount.y)
                             if (horizontal) {
-                                val target = (position + dragAmount.x * 120).coerceIn(0f, duration.toFloat())
-                                viewModel.viewModelScope.launch { connection.seekTo(target.toLong()) }
+                                val base = scrubTargetMs ?: position
+                                val target = (base + dragAmount.x * 120).coerceIn(0f, duration.toFloat())
+                                scrubTargetMs = target.toLong()
                                 seekHint = formatMs(target.toLong())
                             } else {
-                                val fraction = if (dragAmount.x > size.width / 2) -dragAmount.y else dragAmount.y
-                                if (dragAmount.y < 0) {
-                                    adjustVolume(context, fraction / 12f)
+                                // left half = brightness, right half = volume (standard gesture)
+                                val mode =
+                                    verticalDragMode
+                                        ?: (if (dragAnchorX < size.width / 2) "brightness" else "volume")
+                                            .also { verticalDragMode = it }
+                                if (mode == "volume") {
+                                    adjustVolume(context, -dragAmount.y / 14f)
+                                    seekHint = null
                                 } else {
-                                    adjustBrightness(context, fraction / 12f)
+                                    adjustBrightness(context, -dragAmount.y / 14f)
+                                    seekHint = null
                                 }
                             }
                         }
@@ -189,9 +214,33 @@ fun PlayerScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(error ?: "", color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            friendlyPlaybackError(error),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        if (friendlyPlaybackError(error) != error) {
+                            Text(
+                                error.orEmpty(),
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
                     androidx.compose.material3.TextButton(onClick = {
-                        viewModel.viewModelScope.launch { connection.playPause() }
+                        // real retry: re-resolve the stream through the extension,
+                        // falling back to a plain play attempt
+                        val id = currentId
+                        viewModel.viewModelScope.launch {
+                            val refreshed =
+                                if (id != null) {
+                                    runCatching { connection.refreshStream(id, position) }.getOrDefault(false)
+                                } else {
+                                    false
+                                }
+                            if (!refreshed) connection.playPause()
+                        }
                     }) { Text("Retry") }
                 }
             }
@@ -205,9 +254,22 @@ fun PlayerScreen(
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Slider(
-                    value = if (duration > 0) position.toFloat() / duration else 0f,
+                    value =
+                        when {
+                            scrubTargetMs != null && duration > 0 -> scrubTargetMs!!.toFloat() / duration
+                            duration > 0 -> position.toFloat() / duration
+                            else -> 0f
+                        },
                     onValueChange = { fraction ->
-                        viewModel.viewModelScope.launch { connection.seekTo((fraction * duration).toLong()) }
+                        scrubTargetMs = (fraction * duration).toLong()
+                        seekHint = formatMs(scrubTargetMs ?: 0)
+                    },
+                    onValueChangeFinished = {
+                        scrubTargetMs?.let { target ->
+                            viewModel.viewModelScope.launch { connection.seekTo(target) }
+                        }
+                        scrubTargetMs = null
+                        seekHint = null
                     },
                     colors =
                         androidx.compose.material3.SliderDefaults.colors(
@@ -321,4 +383,27 @@ private fun adjustBrightness(
     val current = if (attributes.screenBrightness < 0) 0.5f else attributes.screenBrightness
     attributes.screenBrightness = (current + delta).coerceIn(0.01f, 1f)
     activity.window.attributes = attributes
+}
+
+/**
+ * Human playback error lines; the raw Media3 message stays as a secondary line
+ * so nothing is hidden. "Unsupported source" cases get the clearest wording.
+ */
+internal fun friendlyPlaybackError(raw: String?): String {
+    val message = raw ?: return "Playback stopped unexpectedly."
+    val lower = message.lowercase()
+    return when {
+        "drm" in lower || "protected content" in lower ->
+            "This stream is DRM-protected and cannot be played here."
+        "unsupported" in lower || "does not support" in lower ->
+            "This source uses a format the player cannot handle yet."
+        "403" in lower || "forbidden" in lower ->
+            "The stream refused this device (403). Its link may have expired - tap Retry to re-resolve it."
+        "410" in lower || "gone" in lower ->
+            "This stream link has expired. Tap Retry to re-resolve it from the source."
+        "timeout" in lower || "timed out" in lower || "unable to connect" in lower ->
+            "The stream could not be reached. Check your connection and retry."
+        "network" in lower -> "A network problem interrupted playback."
+        else -> "Playback stopped unexpectedly."
+    }
 }

@@ -36,6 +36,8 @@ import io.github.tukiza7_debug.vibecast.addonx.data.TokenStore
 import io.github.tukiza7_debug.vibecast.addonx.github.GitHubApi
 import io.github.tukiza7_debug.vibecast.addonx.github.GitHubWorkflowRunner
 import io.github.tukiza7_debug.vibecast.addonx.ui.analyzer.AnalyzerViewModel
+import io.github.tukiza7_debug.vibecast.addonx.ui.common.CompletenessDialog
+import io.github.tukiza7_debug.vibecast.addonx.ui.common.JsonPreview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -182,6 +184,55 @@ fun ExportPanel(
             }
         }
 
+    // completeness checklist before the first export of this session
+    var pendingExportDraft by remember { mutableStateOf<ExtensionBuilder.Draft?>(null) }
+
+    val draftForExport = {
+        viewModel.buildDraft(
+            id = ExtensionBuilder.idForHost(viewModel.pageUrl.value.ifEmpty { "https://invalid.test" }),
+            name = name.ifBlank { "Built extension" },
+            version = 1,
+        )
+    }
+
+    val runExport: (ExtensionBuilder.Draft) -> Unit = { draft ->
+        viewModel.exportExtension(draft) { result ->
+            result
+                .onSuccess { (json, code) ->
+                    exportedJson = json
+                    exportedCode = code
+                    exportViewModel.rememberBuild(
+                        name = draft.name,
+                        id = draft.id,
+                        json = json,
+                        code = code,
+                        sourceUrl = viewModel.pageUrl.value,
+                    )
+                    status = "extension is valid and saved to My Builds; ${json.length} chars"
+                }
+                .onFailure {
+                    status =
+                        when (it) {
+                            is io.github.tukiza7_debug.vibecast.core.codes.ExtensionValidationException ->
+                                "invalid extension:\n" + it.issues.joinToString("\n") { issue -> "- $issue" }
+                            else -> "invalid extension: ${it.message}"
+                        }
+                }
+        }
+    }
+
+    pendingExportDraft?.let { draft ->
+        CompletenessDialog(
+            draft = draft,
+            confirmLabel = "Validate & Export",
+            onConfirm = {
+                pendingExportDraft = null
+                runExport(draft)
+            },
+            onDismiss = { pendingExportDraft = null },
+        )
+    }
+
     Column(
         modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -195,38 +246,11 @@ fun ExportPanel(
             singleLine = true,
         )
         Button(onClick = {
-            val draft =
-                viewModel.buildDraft(
-                    id = ExtensionBuilder.idForHost(viewModel.pageUrl.value.ifEmpty { "https://invalid.test" }),
-                    name = name.ifBlank { "Built extension" },
-                    version = 1,
-                )
+            val draft = draftForExport()
             if (draft == null) {
                 status = "load a page and pick at least one item pattern first"
             } else {
-                viewModel.exportExtension(draft) { result ->
-                    result
-                        .onSuccess { (json, code) ->
-                            exportedJson = json
-                            exportedCode = code
-                            exportViewModel.rememberBuild(
-                                name = draft.name,
-                                id = draft.id,
-                                json = json,
-                                code = code,
-                                sourceUrl = viewModel.pageUrl.value,
-                            )
-                            status = "extension is valid and saved to My Builds; ${json.length} chars"
-                        }
-                        .onFailure {
-                            status =
-                                when (it) {
-                                    is io.github.tukiza7_debug.vibecast.core.codes.ExtensionValidationException ->
-                                        "invalid extension:\n" + it.issues.joinToString("\n") { issue -> "- $issue" }
-                                    else -> "invalid extension: ${it.message}"
-                                }
-                        }
-                }
+                pendingExportDraft = draft
             }
         }) { Text("Validate + build") }
         status?.let {
@@ -235,6 +259,7 @@ fun ExportPanel(
             }
         }
         if (exportedJson != null) {
+            JsonPreview(json = exportedJson ?: "")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { saveLauncher.launch("extension.json") }) { Text("Save .json") }
                 OutlinedButton(onClick = {
