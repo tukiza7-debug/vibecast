@@ -78,6 +78,12 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        // stop the bus collector so the controller does not outlive the activity
+        importController.close()
+    }
+
     private fun handleIntent(intent: Intent?) {
         when (intent?.action) {
             Intent.ACTION_VIEW -> {

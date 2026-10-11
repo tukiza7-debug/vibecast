@@ -26,6 +26,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
 import io.github.tukiza7_debug.vibecast.importcode.ImportPromptBus
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,12 +45,20 @@ class ImportPromptController(bus: ImportPromptBus) {
     private val _pending = MutableStateFlow<Pending?>(null)
     val pending: StateFlow<Pending?> = _pending.asStateFlow()
 
+    /** Single collecting scope for the bus; cancelled with [close] when the
+     *  activity owning this controller goes away. */
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate)
+
     init {
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+        scope.launch {
             bus.prompts.collect { prompt ->
                 _pending.value = Pending(prompt.code, prompt.origin, details = null, error = null)
             }
         }
+    }
+
+    fun close() {
+        scope.cancel()
     }
 
     fun offer(
