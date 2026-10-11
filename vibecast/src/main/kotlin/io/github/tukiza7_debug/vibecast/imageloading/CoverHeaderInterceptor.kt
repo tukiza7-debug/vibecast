@@ -5,9 +5,8 @@ import okhttp3.Request
 import okhttp3.Response
 
 /**
- * Applies per-extension headers (and a sane default User-Agent for known hosts)
- * to cover/poster image requests. Headers are derived from the URL, so the cache
- * key stays stable and Coil's memory/disk caches keep working.
+ * Applies extension headers to cover requests. Every image request gets a browser
+ * User-Agent and a Referer, because many CDNs reject the OkHttp default client.
  */
 class CoverHeaderInterceptor(
     private val registry: ImageHeaderRegistry,
@@ -16,24 +15,13 @@ class CoverHeaderInterceptor(
         val request: Request = chain.request()
         val extra = registry.headersFor(request.url.toString())
         val builder = request.newBuilder()
-        if (extra.isNotEmpty()) {
-            extra.forEach { (name, value) ->
-                when (name.lowercase()) {
-                    "user-agent" -> builder.header("User-Agent", value)
-                    "referer" -> builder.header("Referer", value)
-                    else -> builder.header(name, value)
-                }
-            }
-        } else if (request.header("User-Agent") == null && KNOWN_IMAGE_HOSTS.any { request.url.host.endsWith(it) }) {
-            // not an extension host we know; still use a browser-like UA so generic
-            // CDNs do not reject the okhttp default
+        extra.forEach { (name, value) -> builder.header(name, value) }
+        if (request.header("User-Agent") == null && extra.keys.none { it.equals("user-agent", true) }) {
             builder.header("User-Agent", registry.defaultUserAgent)
         }
+        if (request.header("Referer") == null && extra.keys.none { it.equals("referer", true) }) {
+            builder.header("Referer", "${request.url.scheme}://${request.url.host}/")
+        }
         return chain.proceed(builder.build())
-    }
-
-    private companion object {
-        /** Host fragments that commonly serve poster art on extension sites. */
-        val KNOWN_IMAGE_HOSTS = listOf("cdn", "img", "image", "static", "media", "thumb")
     }
 }

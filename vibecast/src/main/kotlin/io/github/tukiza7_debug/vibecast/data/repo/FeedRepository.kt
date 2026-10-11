@@ -155,6 +155,7 @@ class FeedRepository
                                 }
                             },
                             onFailure = { e ->
+                                if (isOptionalMissing(e)) return@fold
                                 add(
                                     HomeRow(
                                         entity.id,
@@ -179,6 +180,7 @@ class FeedRepository
                                 }
                             },
                             onFailure = { e ->
+                                if (isOptionalMissing(e)) return@fold
                                 add(
                                     HomeRow(
                                         entity.id,
@@ -196,6 +198,9 @@ class FeedRepository
 
         /** Short, human-readable failure text; the technical detail stays in logs. */
         private fun friendly(e: Throwable): String = friendlySourceError(e)
+
+        private fun isOptionalMissing(e: Throwable): Boolean =
+            e.message?.contains("step is not defined", ignoreCase = true) == true
 
         data class HomeRow(
             val extensionId: String,

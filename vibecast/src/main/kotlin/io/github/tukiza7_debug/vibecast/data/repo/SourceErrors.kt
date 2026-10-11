@@ -9,6 +9,8 @@ import java.io.IOException
  */
 fun friendlySourceError(e: Throwable): String =
     when {
+        e.message?.contains("step is not defined", ignoreCase = true) == true ->
+            "this section is not included in the extension"
         e is EngineException -> e.message ?: "step failed"
         e is IOException -> "network problem - check your connection and try again"
         e.message?.contains("timed out", ignoreCase = true) == true -> "the source took too long to respond"

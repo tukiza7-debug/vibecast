@@ -43,9 +43,15 @@ class ImageHeaderRegistry
                     if (!entity.enabled) continue
                     try {
                         val ext = json.decodeFromString(Extension.serializer(), entity.json)
-                        if (ext.headers.isEmpty()) continue
-                        val host = ext.baseUrl.toHttpUrlOrNull()?.host ?: continue
-                        parsed += Source(host, normalize(ext.headers))
+                        val base = ext.baseUrl.toHttpUrlOrNull() ?: continue
+                        val headers = normalize(ext.headers).toMutableMap()
+                        if ("referer" !in headers) {
+                            headers["referer"] = "${base.scheme}://${base.host}/"
+                        }
+                        if ("user-agent" !in headers) {
+                            headers["user-agent"] = defaultUserAgent
+                        }
+                        parsed += Source(base.host, headers)
                     } catch (e: Exception) {
                         Log.w(TAG, "skipping headers for ${entity.id}: ${e.message}")
                     }
@@ -58,12 +64,13 @@ class ImageHeaderRegistry
         /** Extra headers for an image URL; empty when the host is unknown. */
         fun headersFor(url: String): Map<String, String> {
             val host = url.toHttpUrlOrNull()?.host ?: return emptyMap()
-            val direct = sources[host]
-            if (direct != null) return direct.headers
-            // one level of suffix match: cdn.example.com -> example.com
-            val root = host.substringAfter('.', missingDelimiterValue = "")
-            val base = sources[root]
-            if (base != null) return base.headers
+            var cursor = host
+            while (cursor.contains('.')) {
+                sources[cursor]?.let { return it.headers }
+                val parent = cursor.substringAfter('.', "")
+                if (parent == cursor || !parent.contains('.')) break
+                cursor = parent
+            }
             return emptyMap()
         }
 
