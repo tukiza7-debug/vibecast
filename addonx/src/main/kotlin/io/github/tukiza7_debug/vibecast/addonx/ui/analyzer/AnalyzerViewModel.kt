@@ -125,7 +125,7 @@ class AnalyzerViewModel
             if (_recordedJson.value.any { it.url == url }) return
             viewModelScope.launch(Dispatchers.IO) {
                 runCatching {
-                    val response = httpClient.fetch(HttpRequest(url, headers = mapOf("User-Agent" to "AddOnX/1.0"), timeoutMs = 8_000))
+                    val response = httpClient.fetch(HttpRequest(url, headers = ExtensionBuilder.browserHeaders(url), timeoutMs = 8_000))
                     val text = response.bodyText()
                     if (!text.trimStart().startsWith("[") && !text.trimStart().startsWith("{")) return@launch
                     val element = Json.parseToJsonElement(text)
@@ -188,7 +188,7 @@ class AnalyzerViewModel
         fun inspectJsonEndpoint(url: String) {
             viewModelScope.launch(Dispatchers.IO) {
                 runCatching {
-                    val response = httpClient.fetch(HttpRequest(url, headers = mapOf("User-Agent" to "AddOnX/1.0")))
+                    val response = httpClient.fetch(HttpRequest(url, headers = ExtensionBuilder.browserHeaders(url)))
                     val element = Json.parseToJsonElement(response.bodyText())
                     val array = firstArray(element) ?: JsonArray(emptyList())
                     val keys = (array.firstOrNull() as? JsonObject)?.keys?.toList() ?: emptyList()
@@ -226,7 +226,7 @@ class AnalyzerViewModel
                 version = version,
                 lang = "en",
                 baseUrl = base,
-                headers = emptyMap(),
+                headers = ExtensionBuilder.browserHeaders(base),
                 search =
                     ExtensionBuilder.StepDraft(
                         name = "search",

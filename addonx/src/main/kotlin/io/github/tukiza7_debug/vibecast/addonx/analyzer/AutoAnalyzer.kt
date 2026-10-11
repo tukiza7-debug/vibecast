@@ -261,7 +261,7 @@ object AutoAnalyzer {
                 version = 1,
                 lang = "en",
                 baseUrl = baseUrl,
-                headers = emptyMap(),
+                headers = ExtensionBuilder.browserHeaders(baseUrl),
                 search = searchStepDraft,
                 latest = null,
                 detail = detailStepDraft,

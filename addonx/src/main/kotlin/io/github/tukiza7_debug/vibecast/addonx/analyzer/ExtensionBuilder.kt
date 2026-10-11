@@ -11,6 +11,30 @@ import kotlinx.serialization.json.JsonPrimitive
  * in what the user actually assigned rather than invented defaults.
  */
 object ExtensionBuilder {
+    /** Same mobile browser UA VibeCast sends on cover requests. */
+    const val BROWSER_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/124.0.0.0 Mobile Safari/537.36"
+
+    /**
+     * Headers written into every generated extension so cover and page requests
+     * are not sent as a bare client. Referer is the site origin.
+     */
+    fun browserHeaders(baseUrl: String): Map<String, String> {
+        val referer =
+            runCatching {
+                val uri = java.net.URI(baseUrl)
+                if (!uri.scheme.isNullOrBlank() && !uri.host.isNullOrBlank()) {
+                    "${uri.scheme}://${uri.host}/"
+                } else {
+                    baseUrl
+                }
+            }.getOrDefault(baseUrl)
+        return linkedMapOf(
+            "User-Agent" to BROWSER_USER_AGENT,
+            "Referer" to referer,
+        )
+    }
     data class StepDraft(
         val name: String,
         val requestUrl: String,

@@ -54,8 +54,7 @@ import io.github.tukiza7_debug.vibecast.addonx.analyzer.ExtensionBuilder
 import io.github.tukiza7_debug.vibecast.addonx.ui.common.friendlyStepError
 
 /** A desktop-ish mobile UA for cover fetches that declare none. */
-private const val TEST_USER_AGENT =
-    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+private const val TEST_USER_AGENT = ExtensionBuilder.BROWSER_USER_AGENT
 
 /** Cover thumbnail honoring the tested draft's declared headers + Referer. */
 @Composable
@@ -81,9 +80,12 @@ private fun TestCover(
                 .data(url)
                 .crossfade(true)
                 .apply {
-                    draft?.headers?.forEach { (name, value) -> setHeader(name, value) }
-                    draft?.baseUrl?.takeIf { it.isNotBlank() }?.let { setHeader("Referer", it) }
-                    if (draft?.headers?.keys?.none { it.equals("User-Agent", ignoreCase = true) } == true) {
+                    val headers = draft?.headers.orEmpty()
+                    headers.forEach { (name, value) -> setHeader(name, value) }
+                    if (headers.keys.none { it.equals("Referer", ignoreCase = true) }) {
+                        draft?.baseUrl?.takeIf { it.isNotBlank() }?.let { setHeader("Referer", it) }
+                    }
+                    if (headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
                         setHeader("User-Agent", TEST_USER_AGENT)
                     }
                 }
