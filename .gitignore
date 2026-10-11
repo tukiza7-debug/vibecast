@@ -17,3 +17,6 @@ keystore.properties
 
 # OS
 .DS_Store
+
+# Kotlin build artifacts
+.kotlin/

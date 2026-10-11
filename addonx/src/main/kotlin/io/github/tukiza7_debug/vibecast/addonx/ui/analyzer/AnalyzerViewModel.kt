@@ -1,6 +1,5 @@
 package io.github.tukiza7_debug.vibecast.addonx.ui.analyzer
 
-import android.annotation.SuppressLint
 import android.webkit.WebView
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -326,17 +325,21 @@ class AnalyzerViewModel
 
 /** The JS bridge object injected into the page as window.VibePick. */
 class PickBridge(private val viewModel: AnalyzerViewModel) {
-
     @android.webkit.JavascriptInterface
-    fun pick(selector: String, outerHtml: String, text: String) {
+    fun pick(
+        selector: String,
+        outerHtml: String,
+        text: String,
+    ) {
         viewModel.onPicked(selector, outerHtml, text)
     }
 }
 
-class PickBridgeFactory @Inject constructor() {
-
-    fun create(viewModel: AnalyzerViewModel): PickBridge = PickBridge(viewModel)
-}
+class PickBridgeFactory
+    @Inject
+    constructor() {
+        fun create(viewModel: AnalyzerViewModel): PickBridge = PickBridge(viewModel)
+    }
 
 /** Inserts the extension into a same-device VibeCast through its signature-protected provider. */
 object VibeCastInstaller {
