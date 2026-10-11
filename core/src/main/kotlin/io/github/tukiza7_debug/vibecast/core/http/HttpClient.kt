@@ -5,6 +5,7 @@ data class HttpRequest(
     val method: String = "GET",
     val headers: Map<String, String> = emptyMap(),
     val timeoutMs: Long = 15_000,
+    val body: ByteArray = ByteArray(0),
 )
 
 data class HttpResponse(

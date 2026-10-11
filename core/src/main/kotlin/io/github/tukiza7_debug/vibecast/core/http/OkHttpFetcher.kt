@@ -10,8 +10,10 @@ class OkHttpFetcher(private val client: OkHttpClient) : HttpClient {
 
     override fun fetch(request: HttpRequest): HttpResponse {
         val isHead = request.method.equals("HEAD", ignoreCase = true)
-        val body = if (request.method.equals("POST", ignoreCase = true)) {
-            ByteArray(0).toRequestBody("application/octet-stream".toMediaTypeOrNull())
+        val hasBody = request.method.equals("POST", ignoreCase = true) || request.method.equals("PUT", ignoreCase = true)
+        val contentType = (request.headers["Content-Type"] ?: "application/json").toMediaTypeOrNull()
+        val body = if (hasBody) {
+            request.body.toRequestBody(contentType)
         } else {
             null
         }

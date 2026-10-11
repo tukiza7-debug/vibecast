@@ -3,6 +3,9 @@ package io.github.tukiza7_debug.vibecast.core.engine
 /** Maps a stream URL to a MIME type; the player layer maps these to Media3 constants. */
 object MimeInference {
 
+    val MEDIA_URL_REGEX = Regex("\\.(m3u8|mp4|mpd)(\\?|$)", RegexOption.IGNORE_CASE)
+
+
     fun fromUrl(url: String): String? {
         val path = url.substringBefore('?').substringBefore('#').lowercase()
         return when {
