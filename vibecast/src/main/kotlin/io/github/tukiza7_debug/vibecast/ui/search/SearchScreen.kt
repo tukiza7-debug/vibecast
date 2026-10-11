@@ -32,12 +32,15 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
 import io.github.tukiza7_debug.vibecast.data.repo.FeedRepository
+import io.github.tukiza7_debug.vibecast.data.repo.friendlySourceError
 import io.github.tukiza7_debug.vibecast.ui.common.EmptyState
 import io.github.tukiza7_debug.vibecast.ui.common.ErrorState
 import io.github.tukiza7_debug.vibecast.ui.common.PosterCard
 import io.github.tukiza7_debug.vibecast.ui.common.RowHeader
 import io.github.tukiza7_debug.vibecast.ui.nav.detailRouteFor
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -105,18 +108,31 @@ class SearchViewModel
 
         private suspend fun runSearch(query: String) {
             _busy.value = true
-            val enabled = extensionRepository.enabled()
-            val targets = enabled.filter { _selected.value == null || it.id == _selected.value }
-            _groups.value =
-                targets.map { entity ->
-                    try {
-                        val ext = feedRepository.load(entity)
-                        SearchGroup(entity.id, entity.name, feedRepository.search(ext, query, 1), error = null)
-                    } catch (e: Exception) {
-                        SearchGroup(entity.id, entity.name, emptyList(), error = e.message ?: "search failed")
-                    }
+            try {
+                val enabled = extensionRepository.enabled()
+                val targets = enabled.filter { _selected.value == null || it.id == _selected.value }
+                // keep prior groups visible while re-searching; replace per source as results land
+                if (_groups.value.isEmpty()) {
+                    _groups.value = targets.map { SearchGroup(it.id, it.name, emptyList(), error = null) }
                 }
-            _busy.value = false
+                coroutineScope {
+                    targets.map { entity ->
+                        launch {
+                            val group =
+                                try {
+                                    val ext = feedRepository.load(entity)
+                                    SearchGroup(entity.id, entity.name, feedRepository.search(ext, query, 1), error = null)
+                                } catch (e: Exception) {
+                                    SearchGroup(entity.id, entity.name, emptyList(), error = friendlySourceError(e))
+                                }
+                            _groups.value =
+                                _groups.value.filterNot { it.extensionId == entity.id } + group
+                        }
+                    }.awaitAll()
+                }
+            } finally {
+                _busy.value = false
+            }
         }
     }
 
