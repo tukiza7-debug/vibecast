@@ -246,15 +246,29 @@ class ExtensionEngine(
         stepName: String,
         requestUrl: String,
     ): List<Target> {
-        val field = step.source.filterField ?: return targets
-        val expected = step.source.filterEquals ?: return targets
+        val field = step.source.filterField
+        var result = targets
+        val expected = step.source.filterEquals
+        val suffix = step.source.filterSuffix
+        if (field == null || (expected == null && suffix == null)) return result
         val extraction =
             if (targets.firstOrNull() is JsonTarget) {
                 FieldExtraction(path = if (field.startsWith("$")) field else "$." + field)
             } else {
                 FieldExtraction(selector = field)
             }
-        return targets.filter { extractFromTarget(it, extraction, stepName, field) == expected }
+        if (expected != null) {
+            result = result.filter { extractFromTarget(it, extraction, stepName, field) == expected }
+        }
+        if (suffix != null) {
+            result =
+                result.filter {
+                    extractFromTarget(it, extraction, stepName, field)
+                        .orEmpty()
+                        .endsWith(suffix, ignoreCase = true)
+                }
+        }
+        return result
     }
 
     private fun extractFromTarget(

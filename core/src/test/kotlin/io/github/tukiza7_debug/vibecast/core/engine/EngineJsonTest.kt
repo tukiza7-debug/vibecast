@@ -71,6 +71,34 @@ class EngineJsonTest {
     }
 
     @Test
+    fun `episodes filterSuffix keeps media files regardless of extension case`() {
+        val json =
+            TestExtensions
+                .jsonSource(server.url("/").toString())
+                .replace(
+                    "\"filterField\": \"format\", \"filterEquals\": \"MPEG4\"",
+                    "\"filterField\": \"name\", \"filterSuffix\": \".mp4\"",
+                )
+        val suffixExtension =
+            io.github.tukiza7_debug.vibecast.core.validate.SchemaValidator
+                .decodeAndValidate(json)
+        enqueue(
+            """
+            {"metadata":{"identifier":"alpha-night"},"files":[
+              {"name":"movie.MP4","format":"h.264"},
+              {"name":"trailer.mp4","format":"512Kb MPEG4"},
+              {"name":"thumb.png","format":"Thumbnail"},
+              {"name":"score.mp3","format":"MP3"}
+            ]}
+            """.trimIndent(),
+        )
+        val episodes = engine.episodes(suffixExtension, "${server.url("/")}metadata/alpha-night")
+        assertEquals(2, episodes.size)
+        assertEquals("movie.MP4", episodes[0].name)
+        assertEquals("trailer.mp4", episodes[1].name)
+    }
+
+    @Test
     fun `direct video probes with HEAD and reads mime`() {
         server.enqueue(MockResponse().setResponseCode(200).setHeader("Content-Type", "video/mp4"))
         val stream = engine.video(extension, "${server.url("/")}download/alpha-night/alpha-night.mp4")

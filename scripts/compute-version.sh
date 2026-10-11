@@ -32,13 +32,9 @@ minor=0
 patch=0
 has_bump=0
 while IFS= read -r line; do
-  case "$line" in
-    *BREAKING\ CHANGE*|*!:\ *|*"!:"*|*!*(fix|feat)*": "*)
-      if printf '%s' "$line" | grep -qE '^[a-z]+(\([^)]*\))?!:' || printf '%s' "$line" | grep -q 'BREAKING CHANGE'; then
-        major=1; has_bump=1
-      fi
-      ;;
-  esac
+  if printf '%s' "$line" | grep -qE '^[a-z]+(\([^)]*\))?!:' || printf '%s' "$line" | grep -q '^BREAKING CHANGE:'; then
+    major=1; has_bump=1
+  fi
   if printf '%s' "$line" | grep -qE '^feat(\([^)]*\))?:'; then
     minor=1; has_bump=1
   elif printf '%s' "$line" | grep -qE '^fix(\([^)]*\))?:'; then

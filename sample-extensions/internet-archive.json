@@ -44,8 +44,8 @@
     "source": {
       "type": "json",
       "path": "$.files[*]",
-      "filterField": "format",
-      "filterEquals": "MPEG4"
+      "filterField": "name",
+      "filterSuffix": ".mp4"
     },
     "fields": {
       "name": { "path": "$.name" },

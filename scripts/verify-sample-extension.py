@@ -57,6 +57,21 @@ def main() -> None:
 
     # The item's url field is produced by the extension's own mapping template.
     url_template = extension["search"]["fields"]["url"].get("template", "")
+    episodes_source = extension["episodes"]["source"]
+    filter_field = episodes_source.get("filterField")
+    filter_equals = episodes_source.get("filterEquals")
+    filter_suffix = episodes_source.get("filterSuffix", "").lower()
+
+    def file_matches(file_entry: dict) -> bool:
+        if filter_field is None:
+            return True
+        value = str(file_entry.get(filter_field, ""))
+        if filter_equals is not None and value != filter_equals:
+            return False
+        if filter_suffix and not value.lower().endswith(filter_suffix):
+            return False
+        return True
+
     metadata = None
     chosen = None
     for doc in docs[:10]:
@@ -66,17 +81,19 @@ def main() -> None:
             continue
         candidate = json.loads(body)
         files = candidate.get("files", [])
-        if candidate.get("metadata", {}).get("title") and any(
-            f.get("format") == "MPEG4" for f in files
-        ):
+        if candidate.get("metadata", {}).get("title") and any(file_matches(f) for f in files):
             metadata = candidate
             chosen = doc
             break
     if metadata is None:
-        fail("no doc among the first 10 has a title and MPEG4 files")
+        formats = sorted({str(f.get("format")) for doc in docs[:5] for f in json.loads(
+            fetch(url_template.replace("{value}", doc["identifier"]))[2]).get("files", [])})
+        names = sorted({str(f.get("name"))[-8:] for doc in docs[:3] for f in json.loads(
+            fetch(url_template.replace("{value}", doc["identifier"]))[2]).get("files", [])})
+        fail(f"no doc among the first 10 matches the episodes filter; observed formats={formats[:12]} name-endings={names[:12]}")
     title = metadata["metadata"]["title"]
-    mpeg4 = [f for f in metadata["files"] if f.get("format") == "MPEG4"]
-    ok(f"detail title {title!r}; {len(mpeg4)} MPEG4 files")
+    mpeg4 = [f for f in metadata["files"] if file_matches(f)]
+    ok(f"detail title {title!r}; {len(mpeg4)} episodes match the filter")
 
     episode = mpeg4[0]
     video_url = f"https://archive.org/download/{chosen['identifier']}/{urllib.parse.quote(episode['name'])}"
