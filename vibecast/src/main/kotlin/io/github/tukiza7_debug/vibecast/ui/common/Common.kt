@@ -1,11 +1,17 @@
 package io.github.tukiza7_debug.vibecast.ui.common
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,13 +24,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import io.github.tukiza7_debug.vibecast.core.model.SearchItem
 
 @Composable
@@ -34,33 +46,23 @@ fun PosterCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier.width(132.dp),
+        modifier =
+            Modifier
+                .width(148.dp)
+                .pressScale(),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Box {
-            AsyncImage(
-                model = item.cover,
-                contentDescription = item.title,
-                contentScale = ContentScale.Crop,
+            CoverImage(
+                url = item.cover,
+                title = item.title,
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .height(190.dp)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)),
+                        .aspectRatio(2f / 3f),
             )
-            if (item.cover.isNullOrBlank()) {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(190.dp)
-                            .background(MaterialTheme.colorScheme.surface),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(item.title.take(1), style = MaterialTheme.typography.headlineMedium)
-                }
-            }
         }
         Text(
             item.title,
@@ -72,15 +74,64 @@ fun PosterCard(
     }
 }
 
+/** Gentle press micro-interaction: scales to 0.96 while touched. Observes presses
+ *  without consuming them, so it composes safely under clickable cards/buttons. */
+fun Modifier.pressScale(pressedScale: Float = 0.96f): Modifier =
+    composed {
+        var pressed by remember { mutableStateOf(false) }
+        val scale by animateFloatAsState(
+            targetValue = if (pressed) pressedScale else 1f,
+            animationSpec = tween(120),
+            label = "pressScale",
+        )
+        graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }.pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                pressed = true
+                waitForUpOrCancellation()
+                pressed = false
+            }
+        }
+    }
+
 @Composable
 fun ErrorState(
     message: String,
     modifier: Modifier = Modifier,
+    onRetry: (() -> Unit)? = null,
 ) {
-    Column(modifier = modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Something failed", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.error)
+    Column(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            androidx.compose.material.icons.Icons.Outlined.WifiOff,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(28.dp),
+        )
         Spacer(Modifier.height(6.dp))
-        Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "Something failed",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        if (onRetry != null) {
+            Spacer(Modifier.height(10.dp))
+            androidx.compose.material3.OutlinedButton(onClick = onRetry) {
+                Text("Retry")
+            }
+        }
     }
 }
 

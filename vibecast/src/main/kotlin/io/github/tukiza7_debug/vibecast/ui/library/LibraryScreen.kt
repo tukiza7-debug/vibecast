@@ -29,20 +29,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import coil.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.data.db.FavoriteEntity
 import io.github.tukiza7_debug.vibecast.data.db.HistoryEntity
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
 import io.github.tukiza7_debug.vibecast.data.repo.FeedRepository
 import io.github.tukiza7_debug.vibecast.data.repo.HistoryRepository
+import io.github.tukiza7_debug.vibecast.ui.common.CoverImage
 import io.github.tukiza7_debug.vibecast.ui.common.EmptyState
+import io.github.tukiza7_debug.vibecast.ui.common.pressScale
 import io.github.tukiza7_debug.vibecast.ui.nav.detailRouteFor
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -79,7 +79,7 @@ class LibraryViewModel
             onReady: (String?) -> Unit,
         ) {
             viewModelScope.launch {
-                onReady(route(entity.extensionId, entity.url, entity.title, entity.cover))
+                onReady(route(entity.extensionId, entity.url, entity.title, entity.cover, entity.itemUrl))
             }
         }
 
@@ -88,12 +88,13 @@ class LibraryViewModel
             url: String,
             title: String,
             cover: String?,
+            itemUrl: String? = null,
         ): String? {
             val e = extensionRepository.get(extensionId) ?: return null
-            val parsed = runCatching { feedRepository.load(e) }.getOrNull() ?: return null
-            // URL is the canonical item key; detail needs the item page, not an episode url.
-            val itemUrl = if (parsed.episodes.request.url.contains("{url}")) url else url
-            return detailRouteFor(extensionId, io.github.tukiza7_debug.vibecast.core.model.SearchItem(title, itemUrl, cover))
+            runCatching { feedRepository.load(e) }.getOrNull() ?: return null
+            // Prefer the stored item page URL (v2 history); fall back to url for old rows.
+            val target = itemUrl?.takeIf { it.isNotBlank() } ?: url
+            return detailRouteFor(extensionId, io.github.tukiza7_debug.vibecast.core.model.SearchItem(title, target, cover))
         }
     }
 
@@ -172,14 +173,14 @@ private fun LibraryCard(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .pressScale(),
         shape = MaterialTheme.shapes.medium,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = cover,
-                contentDescription = title,
-                contentScale = ContentScale.Crop,
+            CoverImage(
+                url = cover,
+                title = title,
                 modifier =
                     Modifier
                         .padding(10.dp)
@@ -208,14 +209,14 @@ private fun HistoryCard(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .pressScale(),
         shape = MaterialTheme.shapes.medium,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = entry.cover,
-                contentDescription = entry.title,
-                contentScale = ContentScale.Crop,
+            CoverImage(
+                url = entry.cover,
+                title = entry.title,
                 modifier =
                     Modifier
                         .padding(10.dp)
