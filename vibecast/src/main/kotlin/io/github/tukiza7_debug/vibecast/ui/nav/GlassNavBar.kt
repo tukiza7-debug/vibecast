@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
@@ -140,7 +141,7 @@ data class GlassNavItem(
 
 @Composable
 private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =
-    androidx.compose.ui.composed {
+    composed {
         val interaction = remember { MutableInteractionSource() }
         this.clickable(
             interactionSource = interaction,

@@ -1,7 +1,9 @@
 package io.github.tukiza7_debug.vibecast.addonx.ui.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,10 +45,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import io.github.tukiza7_debug.vibecast.addonx.ui.common.dottedGrid
+import io.github.tukiza7_debug.vibecast.addonx.ui.theme.ConfidenceHigh
+import io.github.tukiza7_debug.vibecast.addonx.ui.theme.ConfidenceLow
+import io.github.tukiza7_debug.vibecast.addonx.ui.theme.ConfidenceMedium
 
 /**
  * AddOnX home: the One-Link Auto Import hero. Paste any site link, tap Analyze,
@@ -73,24 +81,41 @@ fun AutoImportScreen(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.AutoAwesome,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp),
+            Box(
+                Modifier
+                    .padding(horizontal = 20.dp, vertical = 18.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            ),
+                        ),
                     )
-                    Spacer(Modifier.width(10.dp))
-                    Text("Build an extension\nfrom one link", style = MaterialTheme.typography.headlineMedium)
+                    .dottedGrid(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    .padding(20.dp),
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("Build an extension\nfrom one link", style = MaterialTheme.typography.headlineMedium)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "AddOnX reads the page and proposes every step with a confidence level. Nothing is " +
+                            "invented - low confidence leads to the visual picker.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "AddOnX reads the page and proposes every step with a confidence level. Nothing is " +
-                        "invented - low confidence leads to the visual picker.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
         item {
@@ -191,6 +216,20 @@ fun AutoImportScreen(
                             shape = MaterialTheme.shapes.medium,
                         ) {
                             Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                // confidence dot: green/amber/red from the stored analysis
+                                Box(
+                                    Modifier
+                                        .size(9.dp)
+                                        .background(
+                                            when (entry.confidence) {
+                                                "high" -> ConfidenceHigh
+                                                "medium" -> ConfidenceMedium
+                                                else -> ConfidenceLow
+                                            },
+                                            androidx.compose.foundation.shape.CircleShape,
+                                        ),
+                                )
+                                Spacer(Modifier.width(8.dp))
                                 Column(Modifier.width(150.dp)) {
                                     Text(
                                         entry.title,

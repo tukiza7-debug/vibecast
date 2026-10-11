@@ -1,6 +1,12 @@
 package io.github.tukiza7_debug.vibecast.ui.common
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -30,12 +36,6 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 
 /**
  * The single cover/poster component of the app.
@@ -161,8 +161,6 @@ fun ShimmerSurface(
 
 /** A rounded skeleton placeholder used by loading feeds. */
 @Composable
-fun PosterSkeleton(
-    modifier: Modifier = Modifier,
-) {
+fun PosterSkeleton(modifier: Modifier = Modifier) {
     ShimmerSurface(modifier = modifier.clip(MaterialTheme.shapes.medium))
 }

@@ -8,6 +8,7 @@ import io.github.tukiza7_debug.vibecast.core.engine.EngineException
 import io.github.tukiza7_debug.vibecast.core.engine.ExtensionEngine
 import io.github.tukiza7_debug.vibecast.core.http.HttpClient
 import io.github.tukiza7_debug.vibecast.core.model.Extension
+import io.github.tukiza7_debug.vibecast.core.model.SearchItem
 import io.github.tukiza7_debug.vibecast.core.validate.SchemaValidator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,10 @@ data class StepResult(
     val error: String?,
     val streamUrl: String? = null,
     val streamMime: String? = null,
+    /** Sample items from list steps, so the panel can preview real covers. */
+    val items: List<SearchItem> = emptyList(),
+    /** Detail cover, when the step produced one. */
+    val coverUrl: String? = null,
 )
 
 /**
@@ -51,11 +56,16 @@ class StepTestViewModel
 
         fun clear() {
             _results.value = emptyList()
+            _draft.value = null
         }
+
+        private val _draft = MutableStateFlow<ExtensionBuilder.Draft?>(null)
+        val draft: StateFlow<ExtensionBuilder.Draft?> = _draft.asStateFlow()
 
         fun runPipeline(draft: ExtensionBuilder.Draft) {
             _pipelineRunning.value = true
             _results.value = emptyList()
+            _draft.value = draft
             viewModelScope.launch(Dispatchers.IO) {
                 val outcome =
                     runCatching {
@@ -71,29 +81,59 @@ class StepTestViewModel
         }
 
         private suspend fun runSteps(extension: Extension) {
+            val started = System.currentTimeMillis()
+            val searchItems =
+                runCatching { engine.search(extension, "test", 1).take(5) }.getOrElse { e ->
+                    appendResult(
+                        StepResult(
+                            "search",
+                            System.currentTimeMillis() - started,
+                            "",
+                            (e as? EngineException)?.message ?: e.message,
+                        ),
+                    )
+                    null
+                }
+            if (searchItems == null) return
             appendResult(
-                measured("search") {
-                    engine.search(extension, "test", 1).take(5).let {
-                            items ->
-                        "${items.size} items; first: ${items.firstOrNull()?.title}"
-                    }
-                },
+                StepResult(
+                    step = "search",
+                    timingMs = System.currentTimeMillis() - started,
+                    output = "${searchItems.size} items; first: ${searchItems.firstOrNull()?.title}",
+                    error = null,
+                    items = searchItems,
+                ),
             )
-            val firstUrl = runCatching { engine.search(extension, "test", 1).first().url }.getOrNull()
+            val firstUrl = searchItems.firstOrNull()?.url
             if (firstUrl == null) {
                 appendResult(StepResult("detail", 0, "", "skipped: search returned no items"))
                 appendResult(StepResult("episodes", 0, "", "skipped: search returned no items"))
                 appendResult(StepResult("video", 0, "", "skipped: search returned no items"))
                 return
             }
-            appendResult(
-                measured("detail") {
-                    engine.detail(extension, firstUrl).let {
-                            d ->
-                        "title=${d.title ?: "-"} synopsis=${d.synopsis?.take(60) ?: "-"}"
-                    }
-                },
-            )
+            val detailStarted = System.currentTimeMillis()
+            runCatching { engine.detail(extension, firstUrl) }
+                .onSuccess { d ->
+                    appendResult(
+                        StepResult(
+                            step = "detail",
+                            timingMs = System.currentTimeMillis() - detailStarted,
+                            output = "title=${d.title ?: "-"} synopsis=${d.synopsis?.take(60) ?: "-"}",
+                            error = null,
+                            coverUrl = d.cover,
+                        ),
+                    )
+                }
+                .onFailure { e ->
+                    appendResult(
+                        StepResult(
+                            "detail",
+                            System.currentTimeMillis() - detailStarted,
+                            "",
+                            (e as? EngineException)?.message ?: e.message,
+                        ),
+                    )
+                }
             val episodes =
                 runCatching { engine.episodes(extension, firstUrl) }.getOrElse { e ->
                     appendResult(StepResult("episodes", 0, "", (e as? EngineException)?.message ?: e.message))

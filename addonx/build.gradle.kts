@@ -139,6 +139,9 @@ dependencies {
     implementation(libs.compose.material.icons)
     debugImplementation(libs.compose.ui.tooling)
 
+    // cover previews in the test panel need a real image pipeline with per-request headers
+    implementation(libs.coil.compose)
+
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)

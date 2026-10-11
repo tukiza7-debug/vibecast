@@ -36,7 +36,15 @@ offline in unit tests through saved fixtures.
 - `id` — reverse-DNS-like string, stable per source. A lower `version` can never
   overwrite a higher installed one.
 - `headers` — default headers merged into every step request (steps can add more).
-- `latest` / `popular` are optional; everything else is required.
+  These headers also apply to poster/cover image loading in VibeCast: image URLs on
+  hosts matching `baseUrl` (or one subdomain below it) receive the same Referer,
+  User-Agent and cookies, so header-protected CDNs show covers correctly.
+- `latest` / `popular` are optional; everything else is required. A missing optional
+  step is never an error: the engine reports it as "not present"
+  (`latestOptional()` / `popularOptional()` return `OptionalList.NotPresent`) and
+  VibeCast simply hides the section. An optional step that exists but fails at
+  runtime is still surfaced as a per-section error with a retry, never as a
+  full-screen failure.
 
 ## List steps (`search`, `latest`, `popular`, `detail`, `episodes`)
 

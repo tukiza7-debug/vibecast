@@ -3,12 +3,10 @@ package io.github.tukiza7_debug.vibecast.ui.detail
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -413,4 +411,12 @@ private fun EpisodeRow(
 /** Opens the always-immersive player screen bound to the shared playback session. */
 fun openPlayerScreen(context: Context) {
     context.startActivity(Intent(context, io.github.tukiza7_debug.vibecast.player.PlayerActivity::class.java))
+}
+
+internal fun formatMs(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val h = totalSeconds / 3600
+    val m = (totalSeconds % 3600) / 60
+    val s = totalSeconds % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }

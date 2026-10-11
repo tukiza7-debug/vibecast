@@ -261,7 +261,9 @@ class AnalyzerViewModel
                         name = "episodes",
                         requestUrl = "{url}",
                         sourceType = "html",
-                        itemSelector = _assignments.value["episodes"] ?: ".episode",
+                        // never invent a selector: when the user has not picked one the
+                        // draft stays honest and the test panel / dry-run flag it
+                        itemSelector = _assignments.value["episodes"],
                         jsonPath = null,
                         fields =
                             linkedMapOf(

@@ -88,11 +88,14 @@ update dialog. Updates install in place because package ids never change:
    an honest issue list; AddOnX never invents selectors. Low-confidence steps route
    to the visual picker so you can tap elements directly in the page.
 3. **Walk the steps.** *Test all* opens the test panel, which runs the real engine —
-   search, detail, episodes, video — with per-step timing, and video preview plays
-   through Media3 exactly like VibeCast will.
-4. **Export.** Validate & Export saves the extension under *Builds*, copies a
-   `unix1:…` code, and can publish the file to your own GitHub repository (single
-   file via `gc1:`, or a catalog with `index.json` via `gx1:`).
+   search, detail, episodes, video — with per-step timing, real cover previews using
+   the extension's own headers, and a video preview that plays through Media3
+   exactly like VibeCast will.
+4. **Export.** A completeness checklist shows which steps are ready, partial or
+   skipped (soft warning — it never blocks). Validate & Export saves the extension
+   under *Builds*, copies a `unix1:…` code, and can publish the file to your own
+   GitHub repository (single file via `gc1:`, or a catalog with `index.json` via
+   `gx1:`).
 5. **Watch it.** Send it to VibeCast — direct install, shared text, clipboard or
    deep link — confirm the domains it will contact, and the extension appears on
    Home with Continue Watching tracking your progress.

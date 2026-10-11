@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.tukiza7_debug.vibecast.addonx.analyzer.AutoAnalyzer
 import io.github.tukiza7_debug.vibecast.addonx.analyzer.DomAnalyzer
+import io.github.tukiza7_debug.vibecast.addonx.ui.common.CompletenessDialog
 import io.github.tukiza7_debug.vibecast.addonx.ui.home.AutoImportViewModel
 import io.github.tukiza7_debug.vibecast.addonx.ui.home.AutoUiState
 
@@ -125,6 +126,22 @@ private fun AutoResultContent(
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var publishPath by remember { mutableStateOf("extensions/built.json") }
+    var pendingAction by remember { mutableStateOf<PendingAction?>(null) }
+    var checklistSeen by remember { mutableStateOf(false) }
+
+    pendingAction?.let { action ->
+        CompletenessDialog(
+            draft = result.draft,
+            confirmLabel = action.confirmLabel,
+            onConfirm = {
+                checklistSeen = true
+                val actionToRun = action
+                pendingAction = null
+                actionToRun.run()
+            },
+            onDismiss = { pendingAction = null },
+        )
+    }
 
     Column(
         modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -223,17 +240,20 @@ private fun AutoResultContent(
 
         Button(
             onClick = {
-                busy = true
-                status = null
-                onExport(name) { outcome ->
-                    busy = false
-                    outcome
-                        .onSuccess { (json, code) ->
-                            exported = json to code
-                            status = "Extension is valid and saved to My Builds (${json.length} chars)"
-                        }
-                        .onFailure { status = "Export failed: ${it.message}" }
+                val runExport = {
+                    busy = true
+                    status = null
+                    onExport(name) { outcome ->
+                        busy = false
+                        outcome
+                            .onSuccess { (json, code) ->
+                                exported = json to code
+                                status = "Extension is valid and saved to My Builds (${json.length} chars)"
+                            }
+                            .onFailure { status = "Export failed: ${it.message}" }
+                    }
                 }
+                if (checklistSeen) runExport() else pendingAction = PendingAction("Validate & Export", runExport)
             },
             enabled = !busy,
             modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -251,14 +271,17 @@ private fun AutoResultContent(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
                     onClick = {
-                        onSendToVibeCast(json) { result2 ->
-                            status =
-                                if (result2.isSuccess) {
-                                    "Sent to VibeCast - open its Extensions tab to confirm"
-                                } else {
-                                    "VibeCast rejected it: ${result2.exceptionOrNull()?.message}"
-                                }
+                        val runSend = {
+                            onSendToVibeCast(json) { result2 ->
+                                status =
+                                    if (result2.isSuccess) {
+                                        "Sent to VibeCast - open its Extensions tab to confirm"
+                                    } else {
+                                        "VibeCast rejected it: ${result2.exceptionOrNull()?.message}"
+                                    }
+                            }
                         }
+                        if (checklistSeen) runSend() else pendingAction = PendingAction("Send to VibeCast", runSend)
                     },
                     modifier = Modifier.weight(1f),
                 ) {
@@ -348,3 +371,9 @@ private fun ConfidenceChip(confidence: DomAnalyzer.Confidence) {
         },
     )
 }
+
+/** An action deferred behind the completeness checklist dialog. */
+private data class PendingAction(
+    val confirmLabel: String,
+    val run: () -> Unit,
+)

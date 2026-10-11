@@ -20,8 +20,7 @@ object Routes {
     ): String {
         // URLEncoder is form-encoding and turns spaces into '+', which Navigation
         // does not decode back; encode manually for path/query-safe segments.
-        fun enc(raw: String): String =
-            URLEncoder.encode(raw, "UTF-8").replace("+", "%20")
+        fun enc(raw: String): String = URLEncoder.encode(raw, "UTF-8").replace("+", "%20")
         return buildString {
             append("detail/").append(enc(extensionId))
             append("/").append(enc(itemUrl))
@@ -45,6 +44,7 @@ fun parseDetailRoute(route: String): DetailArgs? {
     val query = route.substringAfter("?", "")
     val parts = path.removePrefix("detail/").split("/")
     if (parts.size < 3) return null
+
     fun queryParam(name: String): String? =
         query.split("&")
             .mapNotNull { pair -> pair.split("=", limit = 2).takeIf { it.size == 2 } }

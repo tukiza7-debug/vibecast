@@ -102,15 +102,16 @@ class FeedRepository
                 val defaultId = settings.defaultExtensionId.firstOrNull()
                 val ordered = if (defaultId == null) extensions else extensions.sortedByDescending { it.id == defaultId }
                 val channel = kotlinx.coroutines.channels.Channel<List<HomeRow>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
-                val producer = launch {
-                    ordered.map { entity ->
-                        async {
-                            val rows = rowsForEntity(entity)
-                            channel.send(rows)
-                        }
-                    }.awaitAll()
-                    channel.close()
-                }
+                val producer =
+                    launch {
+                        ordered.map { entity ->
+                            async {
+                                val rows = rowsForEntity(entity)
+                                channel.send(rows)
+                            }
+                        }.awaitAll()
+                        channel.close()
+                    }
                 for (rows in channel) onRows(rows)
                 producer.join()
             }
@@ -133,8 +134,12 @@ class FeedRepository
                     } catch (e: Exception) {
                         add(
                             HomeRow(
-                                entity.id, entity.name, "Latest", emptyList(),
-                                error = friendly(e), canRetry = true,
+                                entity.id,
+                                entity.name,
+                                "Latest",
+                                emptyList(),
+                                error = friendly(e),
+                                canRetry = true,
                             ),
                         )
                         return@buildList
@@ -152,8 +157,12 @@ class FeedRepository
                             onFailure = { e ->
                                 add(
                                     HomeRow(
-                                        entity.id, entity.name, "Latest", emptyList(),
-                                        error = friendly(e), canRetry = true,
+                                        entity.id,
+                                        entity.name,
+                                        "Latest",
+                                        emptyList(),
+                                        error = friendly(e),
+                                        canRetry = true,
                                     ),
                                 )
                             },
@@ -172,8 +181,12 @@ class FeedRepository
                             onFailure = { e ->
                                 add(
                                     HomeRow(
-                                        entity.id, entity.name, "Popular", emptyList(),
-                                        error = friendly(e), canRetry = true,
+                                        entity.id,
+                                        entity.name,
+                                        "Popular",
+                                        emptyList(),
+                                        error = friendly(e),
+                                        canRetry = true,
                                     ),
                                 )
                             },
@@ -182,7 +195,7 @@ class FeedRepository
             }
 
         /** Short, human-readable failure text; the technical detail stays in logs. */
-        private fun friendly(e: Exception): String = friendlySourceError(e)
+        private fun friendly(e: Throwable): String = friendlySourceError(e)
 
         data class HomeRow(
             val extensionId: String,

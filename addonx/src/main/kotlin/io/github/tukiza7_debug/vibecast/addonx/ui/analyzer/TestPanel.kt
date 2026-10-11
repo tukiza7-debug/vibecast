@@ -1,14 +1,17 @@
 package io.github.tukiza7_debug.vibecast.addonx.ui.analyzer
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -18,6 +21,7 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,7 +36,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -40,7 +48,54 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import io.github.tukiza7_debug.vibecast.addonx.analyzer.ExtensionBuilder
+import io.github.tukiza7_debug.vibecast.addonx.ui.common.friendlyStepError
+
+/** A desktop-ish mobile UA for cover fetches that declare none. */
+private const val TEST_USER_AGENT =
+    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+
+/** Cover thumbnail honoring the tested draft's declared headers + Referer. */
+@Composable
+private fun TestCover(
+    url: String?,
+    draft: ExtensionBuilder.Draft?,
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    if (url.isNullOrBlank()) {
+        Card(modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(title.take(1), style = MaterialTheme.typography.titleLarge)
+            }
+        }
+        return
+    }
+    val context = LocalContext.current
+    val request =
+        remember(url, draft) {
+            ImageRequest
+                .Builder(context)
+                .data(url)
+                .crossfade(true)
+                .apply {
+                    draft?.headers?.forEach { (name, value) -> setHeader(name, value) }
+                    draft?.baseUrl?.takeIf { it.isNotBlank() }?.let { setHeader("Referer", it) }
+                    if (draft?.headers?.keys?.none { it.equals("User-Agent", ignoreCase = true) } == true) {
+                        setHeader("User-Agent", TEST_USER_AGENT)
+                    }
+                }
+                .build()
+        }
+    AsyncImage(
+        model = request,
+        contentDescription = title,
+        contentScale = ContentScale.Crop,
+        modifier = modifier.clip(MaterialTheme.shapes.small),
+    )
+}
 
 /** Test tab: builds the draft and runs every step through the real core engine. */
 @Composable
@@ -52,6 +107,7 @@ fun TestPanel(
     val results by testViewModel.results.collectAsState()
     val pipelineRunning by testViewModel.pipelineRunning.collectAsState()
     val lastAction by viewModel.lastAction.collectAsState()
+    val testedDraft by testViewModel.draft.collectAsState()
     var previewUrl by remember { mutableStateOf<String?>(null) }
     var previewMime by remember { mutableStateOf<String?>(null) }
 
@@ -121,12 +177,51 @@ fun TestPanel(
                         )
                     }
                     if (result.error != null) {
+                        val friendly = friendlyStepError(result.step, result.error)
                         Text(
-                            result.error ?: "",
+                            friendly ?: result.error.orEmpty(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
+                        if (friendly != null && friendly != result.error) {
+                            Text(
+                                "detail: ${result.error}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     } else {
+                        if (result.step == "search" && result.items.any { !it.cover.isNullOrBlank() }) {
+                            // real cover preview with the draft's own headers
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(result.items.size) { index ->
+                                    val item = result.items[index]
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        TestCover(
+                                            url = item.cover,
+                                            draft = testedDraft,
+                                            title = item.title,
+                                            modifier = Modifier.size(width = 78.dp, height = 110.dp),
+                                        )
+                                        Text(
+                                            item.title,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.width(78.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (result.step == "detail" && result.coverUrl != null) {
+                            TestCover(
+                                url = result.coverUrl,
+                                draft = testedDraft,
+                                title = result.output,
+                                modifier = Modifier.size(width = 78.dp, height = 110.dp),
+                            )
+                        }
                         Text(
                             result.output.take(400),
                             style = MaterialTheme.typography.bodySmall,

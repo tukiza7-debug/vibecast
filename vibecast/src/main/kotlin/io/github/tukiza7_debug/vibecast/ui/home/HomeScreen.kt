@@ -253,11 +253,12 @@ fun HomeScreen(
                         // a failed section never blocks the rest of Home; retry only re-runs it
                         ErrorState(
                             row.error ?: "",
-                            onRetry = if (row.canRetry) {
-                                { viewModel.retrySection(row.extensionId) }
-                            } else {
-                                null
-                            },
+                            onRetry =
+                                if (row.canRetry) {
+                                    { viewModel.retrySection(row.extensionId) }
+                                } else {
+                                    null
+                                },
                         )
                     }
                 } else {

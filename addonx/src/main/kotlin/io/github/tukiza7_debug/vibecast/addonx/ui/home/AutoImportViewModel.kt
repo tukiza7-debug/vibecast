@@ -93,7 +93,23 @@ class AutoImportViewModel
                                 throw IllegalStateException("HTTP ${response.code} - the site refused the analyzer request")
                             }
                             _state.value = AutoUiState.Analyzing(url, "reading the page structure")
-                            AutoAnalyzer.analyze(url, response.bodyText(), AutoAnalyzer.Recording(), engine)
+                            val html = response.bodyText()
+                            // network evidence for the one-link flow: probe JSON data
+                            // endpoints the page references (same idea as the manual
+                            // analyzer's record button, minus the WebView)
+                            _state.value = AutoUiState.Analyzing(url, "listening for data endpoints")
+                            val recording =
+                                runCatching {
+                                    AutoAnalyzer.Recording(
+                                        jsonEndpoints =
+                                            io.github.tukiza7_debug.vibecast.addonx.analyzer.JsonEndpointProbe.probeAll(
+                                                httpClient,
+                                                html,
+                                                url,
+                                            ),
+                                    )
+                                }.getOrDefault(AutoAnalyzer.Recording())
+                            AutoAnalyzer.analyze(url, html, recording, engine)
                         }
                     }
                 result

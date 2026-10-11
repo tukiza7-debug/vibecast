@@ -39,7 +39,6 @@ import io.github.tukiza7_debug.vibecast.ui.common.PosterCard
 import io.github.tukiza7_debug.vibecast.ui.common.RowHeader
 import io.github.tukiza7_debug.vibecast.ui.nav.detailRouteFor
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -128,7 +127,8 @@ class SearchViewModel
                             _groups.value =
                                 _groups.value.filterNot { it.extensionId == entity.id } + group
                         }
-                    }.awaitAll()
+                    }
+                    // coroutineScope returns once every launched child completes
                 }
             } finally {
                 _busy.value = false

@@ -7,7 +7,7 @@ import java.io.IOException
  * One shared mapping from engine/IO failures to short, human phrases. Technical
  * details stay available through the exception chain; screens show these lines.
  */
-fun friendlySourceError(e: Exception): String =
+fun friendlySourceError(e: Throwable): String =
     when {
         e is EngineException -> e.message ?: "step failed"
         e is IOException -> "network problem - check your connection and try again"
