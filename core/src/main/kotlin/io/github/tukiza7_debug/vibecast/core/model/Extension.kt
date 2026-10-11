@@ -45,6 +45,7 @@ data class SourceSpec(
     val filterField: String? = null,
     val filterEquals: String? = null,
     val filterSuffix: String? = null,
+    val filterContains: String? = null,
 )
 
 @Serializable

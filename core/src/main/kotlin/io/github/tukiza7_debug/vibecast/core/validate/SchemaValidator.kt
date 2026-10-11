@@ -207,6 +207,22 @@ object SchemaValidator {
         required.forEach { field ->
             if (fields[field] == null) issues.add("$stepName.fields: required field '$field' is missing")
         }
+        val filterField = (source["filterField"] as? JsonPrimitive)?.content
+        if (filterField != null) {
+            val hasCriterion =
+                listOf("filterEquals", "filterSuffix", "filterContains").any {
+                    !(source[it] as? JsonPrimitive)?.content.isNullOrBlank()
+                }
+            if (!hasCriterion) {
+                issues.add("$stepName.source: filterField needs filterEquals, filterSuffix or filterContains")
+            }
+        } else {
+            listOf("filterEquals", "filterSuffix", "filterContains").forEach { key ->
+                if (!(source[key] as? JsonPrimitive)?.content.isNullOrBlank()) {
+                    issues.add("$stepName.source: $key needs filterField")
+                }
+            }
+        }
     }
 
     private fun checkExtraction(

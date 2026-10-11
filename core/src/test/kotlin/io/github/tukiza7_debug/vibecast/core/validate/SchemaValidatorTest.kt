@@ -103,4 +103,40 @@ class SchemaValidatorTest {
     fun `decodeAndValidate throws with issues`() {
         SchemaValidator.decodeAndValidate("{}")
     }
+
+    @Test
+    fun `filterField without any criterion is rejected`() {
+        val text =
+            TestExtensions.jsonSource(base())
+                .replace(
+                    "\"filterField\": \"format\", \"filterEquals\": \"MPEG4\"",
+                    "\"filterField\": \"format\"",
+                )
+        val issues = SchemaValidator.validate(text)
+        assertTrue(issues.any { it == "episodes.source: filterField needs filterEquals, filterSuffix or filterContains" })
+    }
+
+    @Test
+    fun `filter criterion without filterField is rejected`() {
+        val text =
+            TestExtensions.jsonSource(base())
+                .replace(
+                    "\"filterField\": \"format\", \"filterEquals\": \"MPEG4\"",
+                    "\"filterContains\": \"MP4\"",
+                )
+        val issues = SchemaValidator.validate(text)
+        assertTrue(issues.any { it == "episodes.source: filterContains needs filterField" })
+    }
+
+    @Test
+    fun `filterContains with filterField is accepted`() {
+        val text =
+            TestExtensions.jsonSource(base())
+                .replace(
+                    "\"filterField\": \"format\", \"filterEquals\": \"MPEG4\"",
+                    "\"filterField\": \"name\", \"filterContains\": \"1080p\"",
+                )
+        val issues = SchemaValidator.validate(text)
+        assertEquals(emptyList<String>(), issues)
+    }
 }

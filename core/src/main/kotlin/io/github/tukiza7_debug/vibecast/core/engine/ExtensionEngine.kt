@@ -116,6 +116,84 @@ class ExtensionEngine(
         )
     }
 
+    /**
+     * Validates an extension structurally without touching the network: templates must
+     * resolve with sample variables, selectors must parse against an empty document and
+     * every regex must compile. Returns all issues found, named by step and field.
+     */
+    fun dryRun(extension: Extension): List<String> {
+        val issues = mutableListOf<String>()
+        val sampleVars =
+            mapOf(
+                "query" to "sample query",
+                "page" to "1",
+                "url" to extension.baseUrl,
+            )
+
+        fun checkListStep(
+            name: String,
+            step: ListStep?,
+        ) {
+            step ?: return
+            try {
+                UrlResolver.resolveTemplate(step.request.url, extension.baseUrl, sampleVars)
+            } catch (e: Exception) {
+                issues.add("[$name.request.url] template does not resolve: ${e.message}")
+            }
+            if (step.source.type.lowercase() == SOURCE_HTML && !step.source.selector.isNullOrBlank()) {
+                try {
+                    Jsoup.parse("<html><body></body></html>").select(step.source.selector)
+                } catch (e: Exception) {
+                    issues.add("[$name.source] invalid selector '${step.source.selector}': ${e.message}")
+                }
+            }
+            step.fields.forEach { (fieldName, extraction) ->
+                if (extraction.regex != null) {
+                    try {
+                        Regex(extraction.regex)
+                    } catch (e: Exception) {
+                        issues.add("[$name.fields.$fieldName] invalid regex '${extraction.regex}': ${e.message}")
+                    }
+                }
+                if (extraction.selector != null && step.source.type.lowercase() == SOURCE_HTML) {
+                    try {
+                        Jsoup.parse("<html><body></body></html>").select(extraction.selector)
+                    } catch (e: Exception) {
+                        issues.add("[$name.fields.$fieldName] invalid selector '${extraction.selector}': ${e.message}")
+                    }
+                }
+            }
+            if (step.source.filterField != null &&
+                step.source.filterEquals == null &&
+                step.source.filterSuffix == null &&
+                step.source.filterContains == null
+            ) {
+                issues.add("[$name.source] filterField needs filterEquals, filterSuffix or filterContains")
+            }
+        }
+        checkListStep("search", extension.search)
+        checkListStep("latest", extension.latest)
+        checkListStep("popular", extension.popular)
+        checkListStep("detail", extension.detail)
+        checkListStep("episodes", extension.episodes)
+        try {
+            UrlResolver.resolveTemplate(extension.video.request.url, extension.baseUrl, sampleVars)
+        } catch (e: Exception) {
+            issues.add("[video.request.url] template does not resolve: ${e.message}")
+        }
+        if (extension.video.strategy !in listOf(STRATEGY_DIRECT, STRATEGY_REGEX, STRATEGY_IFRAME, STRATEGY_WEBVIEW)) {
+            issues.add("[video.strategy] unknown strategy '${extension.video.strategy}'")
+        }
+        extension.video.pattern?.let { pattern ->
+            try {
+                Regex(pattern)
+            } catch (e: Exception) {
+                issues.add("[video.pattern] invalid regex '$pattern': ${e.message}")
+            }
+        }
+        return issues
+    }
+
     private fun resolveDirect(
         step: VideoStep,
         baseUrl: String,
@@ -247,16 +325,17 @@ class ExtensionEngine(
         requestUrl: String,
     ): List<Target> {
         val field = step.source.filterField
-        var result = targets
         val expected = step.source.filterEquals
         val suffix = step.source.filterSuffix
-        if (field == null || (expected == null && suffix == null)) return result
+        val contains = step.source.filterContains
+        if (field == null || (expected == null && suffix == null && contains == null)) return targets
         val extraction =
             if (targets.firstOrNull() is JsonTarget) {
                 FieldExtraction(path = if (field.startsWith("$")) field else "$." + field)
             } else {
                 FieldExtraction(selector = field)
             }
+        var result = targets
         if (expected != null) {
             result = result.filter { extractFromTarget(it, extraction, stepName, field) == expected }
         }
@@ -266,6 +345,14 @@ class ExtensionEngine(
                     extractFromTarget(it, extraction, stepName, field)
                         .orEmpty()
                         .endsWith(suffix, ignoreCase = true)
+                }
+        }
+        if (contains != null) {
+            result =
+                result.filter {
+                    extractFromTarget(it, extraction, stepName, field)
+                        .orEmpty()
+                        .contains(contains, ignoreCase = true)
                 }
         }
         return result
@@ -386,8 +473,17 @@ class ExtensionEngine(
             } catch (e: IOException) {
                 throw EngineException(stepName, "request", "network error for $url: ${e.message}", e)
             }
-        if (response.code !in 200..399) throw EngineException(stepName, "request", "HTTP ${response.code} for $url")
-        return response
+        if (response.code in 200..399) return response
+        val hint =
+            when {
+                response.code == 403 ->
+                    "the site refused the request (403); it may require browser headers or block non-browser clients"
+                response.code == 404 -> "the URL resolved to a missing page (404); check the request template"
+                response.code == 429 -> "the site is rate limiting (429); retry later"
+                response.code in 500..599 -> "the site returned a server error"
+                else -> "the site redirected to an error page"
+            }
+        throw EngineException(stepName, "request", "HTTP ${response.code} for $url: $hint")
     }
 
     private fun probeMimeType(
