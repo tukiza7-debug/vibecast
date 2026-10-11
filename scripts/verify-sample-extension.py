@@ -55,7 +55,9 @@ def main() -> None:
         fail(f"search docs missing mapped fields: {sorted(first)[:6]}")
     ok(f"search found {len(docs)} docs, first identifier {first['identifier']!r}")
 
-    detail_url = first["identifier"]
+    # The item's url field is produced by the extension's own mapping template.
+    url_template = extension["search"]["fields"]["url"].get("template", "")
+    detail_url = url_template.replace("{value}", first["identifier"])
     status, _, body = fetch(detail_url)
     if status != 200:
         fail(f"metadata endpoint returned HTTP {status}")

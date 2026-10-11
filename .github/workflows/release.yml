@@ -3,6 +3,16 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_addonx:
+        description: "Force AddOnX release"
+        type: boolean
+        default: false
+      force_vibecast:
+        description: "Force VibeCast release"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,10 +27,12 @@ jobs:
     permissions:
       contents: read
     outputs:
-      addonx: ${{ steps.filter.outputs.addonx }}
-      vibecast: ${{ steps.filter.outputs.vibecast }}
+      addonx: ${{ steps.decide.outputs.addonx }}
+      vibecast: ${{ steps.decide.outputs.vibecast }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -39,6 +51,16 @@ jobs:
               - 'brand.properties'
               - 'gradle/libs.versions.toml'
               - 'scripts/**'
+      - name: Decide release targets
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "addonx=${{ inputs.force_addonx }}" >> "$GITHUB_OUTPUT"
+            echo "vibecast=${{ inputs.force_vibecast }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "addonx=${{ steps.filter.outputs.addonx }}" >> "$GITHUB_OUTPUT"
+            echo "vibecast=${{ steps.filter.outputs.vibecast }}" >> "$GITHUB_OUTPUT"
+          fi
 
   release-addonx:
     needs: changes
@@ -46,6 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      workflows: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -179,6 +202,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      workflows: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
