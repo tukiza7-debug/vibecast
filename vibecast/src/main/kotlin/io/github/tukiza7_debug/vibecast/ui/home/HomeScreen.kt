@@ -1,56 +1,70 @@
 package io.github.tukiza7_debug.vibecast.ui.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import coil.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.data.db.HistoryEntity
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
 import io.github.tukiza7_debug.vibecast.data.repo.FeedRepository
 import io.github.tukiza7_debug.vibecast.data.repo.HistoryRepository
+import io.github.tukiza7_debug.vibecast.ui.common.CoverImage
 import io.github.tukiza7_debug.vibecast.ui.common.EmptyState
 import io.github.tukiza7_debug.vibecast.ui.common.ErrorState
 import io.github.tukiza7_debug.vibecast.ui.common.PosterCard
+import io.github.tukiza7_debug.vibecast.ui.common.PosterSkeleton
 import io.github.tukiza7_debug.vibecast.ui.common.RowHeader
+import io.github.tukiza7_debug.vibecast.ui.common.pressScale
 import io.github.tukiza7_debug.vibecast.ui.nav.detailRouteFor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -77,18 +91,56 @@ class HomeViewModel
         private val _refreshing = MutableStateFlow(false)
         val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
+        private var refreshJob: kotlinx.coroutines.Job? = null
+
         init {
-            refresh()
+            // observeAll() replays the current list immediately, so the collector alone
+            // drives the first load (no double refresh at startup).
             viewModelScope.launch {
-                extensions.collect { refresh() }
+                extensionRepository.observeAll()
+                    .map { all -> all.filter { entity -> entity.enabled } }
+                    .collect { entities ->
+                        refreshJob?.cancel()
+                        refreshJob = launch { loadRows(entities) }
+                    }
             }
         }
 
         fun refresh() {
+            refreshJob?.cancel()
+            refreshJob =
+                viewModelScope.launch {
+                    val entities = extensionRepository.enabled()
+                    loadRows(entities)
+                }
+        }
+
+        /** Retries a single failed section without reloading the whole feed. */
+        fun retrySection(extensionId: String) {
             viewModelScope.launch {
-                _refreshing.value = true
-                val enabled = extensionRepository.enabled()
-                _rows.value = feedRepository.homeRows(enabled)
+                val entity = extensionRepository.enabled().firstOrNull { it.id == extensionId } ?: return@launch
+                val fresh = feedRepository.rowsForEntity(entity)
+                _rows.value = _rows.value.filterNot { it.extensionId == extensionId } + fresh
+            }
+        }
+
+        private suspend fun loadRows(entities: List<io.github.tukiza7_debug.vibecast.data.db.ExtensionEntity>) {
+            if (entities.isEmpty()) {
+                _rows.value = emptyList()
+                _refreshing.value = false
+                return
+            }
+            _refreshing.value = true
+            try {
+                feedRepository.homeRows(entities) { incoming ->
+                    // Incremental: replace this extension's rows as soon as they finish,
+                    // keeping arrival order stable for a snappy feed.
+                    synchronized(_rows) {
+                        val kept = _rows.value.filterNot { row -> incoming.any { it.extensionId == row.extensionId } }
+                        _rows.value = kept + incoming
+                    }
+                }
+            } finally {
                 _refreshing.value = false
             }
         }
@@ -110,7 +162,7 @@ fun HomeScreen(
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { viewModel.refresh() }) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = 24.dp),
         ) {
             item {
                 TopAppBar(
@@ -125,6 +177,18 @@ fun HomeScreen(
                     },
                 )
             }
+            val heroRow = rows.firstOrNull { it.error == null && it.items.isNotEmpty() }
+            val heroItem = heroRow?.items?.firstOrNull()
+            if (heroRow != null && heroItem != null) {
+                item(key = "hero") {
+                    HeroBanner(
+                        item = heroItem,
+                        onOpen = { onOpenDetail(detailRouteFor(heroRow.extensionId, heroItem, autoplay = true)) },
+                        onInfo = { onOpenDetail(detailRouteFor(heroRow.extensionId, heroItem)) },
+                    )
+                }
+                item(key = "hero-space") { Spacer(Modifier.height(6.dp)) }
+            }
             if (rows.isEmpty() && !refreshing) {
                 item {
                     EmptyState(
@@ -138,9 +202,23 @@ fun HomeScreen(
                     )
                 }
             }
+            if (rows.isEmpty() && refreshing) {
+                // skeleton feed: hero + two poster rows while the first load runs
+                item(key = "skeleton-hero") {
+                    PosterSkeleton(
+                        modifier =
+                            Modifier
+                                .padding(horizontal = 16.dp)
+                                .fillMaxWidth()
+                                .height(210.dp),
+                    )
+                }
+                item(key = "skeleton-row-1") { SkeletonPosterRow() }
+                item(key = "skeleton-row-2") { SkeletonPosterRow() }
+            }
             if (history.isNotEmpty()) {
                 item(key = "continue-header") {
-                    RowHeader("Continue watching", subtitle = null)
+                    RowHeader("Continue watching", subtitle = "Pick up where you left off")
                 }
                 item(key = "continue-row") {
                     LazyRow(
@@ -152,7 +230,12 @@ fun HomeScreen(
                                 onOpenDetail(
                                     detailRouteFor(
                                         entry.extensionId,
-                                        io.github.tukiza7_debug.vibecast.core.model.SearchItem(entry.title, entry.url, entry.cover),
+                                        io.github.tukiza7_debug.vibecast.core.model.SearchItem(
+                                            entry.title,
+                                            // open the item page, falling back for pre-migration rows
+                                            entry.itemUrl.ifBlank { entry.url },
+                                            entry.cover,
+                                        ),
                                     ),
                                 )
                             }
@@ -167,7 +250,15 @@ fun HomeScreen(
                 }
                 if (row.error != null) {
                     item(key = "${row.extensionId}-${row.title}-error") {
-                        ErrorState(row.error ?: "")
+                        // a failed section never blocks the rest of Home; retry only re-runs it
+                        ErrorState(
+                            row.error ?: "",
+                            onRetry = if (row.canRetry) {
+                                { viewModel.retrySection(row.extensionId) }
+                            } else {
+                                null
+                            },
+                        )
                     }
                 } else {
                     item(key = "${row.extensionId}-${row.title}-items") {
@@ -187,23 +278,118 @@ fun HomeScreen(
     }
 }
 
-/** Resume card with a progress bar showing how far the last session got. */
+/** Shimmer stand-in for a poster row during first load. */
+@Composable
+private fun SkeletonPosterRow() {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.padding(top = 8.dp),
+    ) {
+        items(4) {
+            PosterSkeleton(
+                modifier =
+                    Modifier
+                        .width(148.dp)
+                        .height(222.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Featured hero: large cover, bottom-up gradient scrim, title and Play / Info.
+ * Shown from the first healthy feed row so Home opens with a cinematic focal point.
+ */
+@Composable
+private fun HeroBanner(
+    item: io.github.tukiza7_debug.vibecast.core.model.SearchItem,
+    onOpen: () -> Unit,
+    onInfo: () -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth()
+                .height(230.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .pressScale()
+                .clickable(onClick = onInfo),
+    ) {
+        CoverImage(
+            url = item.cover,
+            title = item.title,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(
+            modifier =
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to androidx.compose.ui.graphics.Color.Transparent,
+                            0.55f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.15f),
+                            1f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.85f),
+                        ),
+                    ),
+        )
+        Column(
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+        ) {
+            Text(
+                item.title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = androidx.compose.ui.graphics.Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    onClick = onOpen,
+                    contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Play")
+                }
+                OutlinedButton(
+                    onClick = onInfo,
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+                ) {
+                    Text("Info", color = androidx.compose.ui.graphics.Color.White)
+                }
+            }
+        }
+    }
+}
+
+/** Resume card with a glowing progress bar showing how far the last session got. */
 @Composable
 private fun ResumeCard(
     entry: HistoryEntity,
     onClick: () -> Unit,
 ) {
-    androidx.compose.material3.Card(onClick = onClick, modifier = Modifier.width(150.dp)) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.width(168.dp).pressScale(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
         Column {
-            AsyncImage(
-                model = entry.cover,
-                contentDescription = entry.title,
-                contentScale = ContentScale.Crop,
+            CoverImage(
+                url = entry.cover,
+                title = entry.title,
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .height(84.dp)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)),
+                        .height(94.dp),
             )
             Column(Modifier.padding(10.dp)) {
                 Text(
@@ -220,7 +406,14 @@ private fun ResumeCard(
                     }
                 LinearProgressIndicator(
                     progress = { progress },
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp)
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surface,
                 )
                 Text(
                     "${formatMinutes(entry.positionMs)} of ${formatMinutes(entry.durationMs)}",
