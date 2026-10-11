@@ -18,7 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ProposalsPanel(viewModel: AnalyzerViewModel, modifier: Modifier = Modifier) {
+fun ProposalsPanel(
+    viewModel: AnalyzerViewModel,
+    modifier: Modifier = Modifier,
+) {
     val analysis by viewModel.analysis.collectAsState()
     val picked by viewModel.picked.collectAsState()
     val assignments by viewModel.assignments.collectAsState()

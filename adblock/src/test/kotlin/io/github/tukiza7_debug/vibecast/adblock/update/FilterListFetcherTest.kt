@@ -1,6 +1,5 @@
 package io.github.tukiza7_debug.vibecast.adblock.update
 
-import java.io.File
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -11,9 +10,9 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 
 class FilterListFetcherTest {
-
     @get:Rule
     val tmp = TemporaryFolder()
 

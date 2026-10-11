@@ -1,9 +1,6 @@
 package io.github.tukiza7_debug.vibecast.ui.settings
 
 import android.app.Activity
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,14 +16,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,87 +35,95 @@ import io.github.tukiza7_debug.vibecast.BuildConfig
 import io.github.tukiza7_debug.vibecast.data.prefs.SettingsStore
 import io.github.tukiza7_debug.vibecast.data.remote.UpdateRepository
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
-import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltViewModel
-class SettingsViewModel @Inject constructor(
-    val settings: SettingsStore,
-    private val extensionRepository: ExtensionRepository,
-    private val updateRepository: UpdateRepository,
-    private val apkInstaller: io.github.tukiza7_debug.vibecast.data.remote.ApkInstaller,
-    val adblockSettings: io.github.tukiza7_debug.vibecast.adblock.prefs.AdBlockSettings,
-) : ViewModel() {
+class SettingsViewModel
+    @Inject
+    constructor(
+        val settings: SettingsStore,
+        private val extensionRepository: ExtensionRepository,
+        private val updateRepository: UpdateRepository,
+        private val apkInstaller: io.github.tukiza7_debug.vibecast.data.remote.ApkInstaller,
+        val adblockSettings: io.github.tukiza7_debug.vibecast.adblock.prefs.AdBlockSettings,
+    ) : ViewModel() {
+        val theme = settings.theme.stateIn(viewModelScope, SharingStarted.Eagerly, "dark")
+        val defaultExtensionId = settings.defaultExtensionId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        val defaultSpeed = settings.defaultSpeed.stateIn(viewModelScope, SharingStarted.Eagerly, 1f)
+        val autoUpdate = settings.autoUpdateCheck.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
-    val theme = settings.theme.stateIn(viewModelScope, SharingStarted.Eagerly, "dark")
-    val defaultExtensionId = settings.defaultExtensionId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    val defaultSpeed = settings.defaultSpeed.stateIn(viewModelScope, SharingStarted.Eagerly, 1f)
-    val autoUpdate = settings.autoUpdateCheck.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+        val extensions =
+            extensionRepository.observeAll()
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val extensions = extensionRepository.observeAll()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        val adblockEnabled = adblockSettings.enabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+        val easyListEnabled = adblockSettings.easyListEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+        val easyPrivacyEnabled = adblockSettings.easyPrivacyEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+        val blockedTotal = adblockSettings.blockedTotal.stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
 
-    val adblockEnabled = adblockSettings.enabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
-    val easyListEnabled = adblockSettings.easyListEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
-    val easyPrivacyEnabled = adblockSettings.easyPrivacyEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
-    val blockedTotal = adblockSettings.blockedTotal.stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
+        var updateMessage = mutableStateOf<String?>(null)
+        var checkingUpdate = mutableStateOf(false)
+        var availableUpdate = mutableStateOf<UpdateRepository.Release?>(null)
 
-    var updateMessage = mutableStateOf<String?>(null)
-    var checkingUpdate = mutableStateOf(false)
-    var availableUpdate = mutableStateOf<UpdateRepository.Release?>(null)
+        fun setTheme(value: String) = viewModelScope.launch { settings.setTheme(value) }
 
-    fun setTheme(value: String) = viewModelScope.launch { settings.setTheme(value) }
-    fun setDefaultExtension(id: String?) = viewModelScope.launch { settings.setDefaultExtensionId(id) }
-    fun setSpeed(value: Float) = viewModelScope.launch { settings.setDefaultSpeed(value) }
-    fun setAdblockEnabled(value: Boolean) = viewModelScope.launch { adblockSettings.setEnabled(value) }
-    fun setEasyList(value: Boolean) = viewModelScope.launch { adblockSettings.setEasyListEnabled(value) }
-    fun setEasyPrivacy(value: Boolean) = viewModelScope.launch { adblockSettings.setEasyPrivacyEnabled(value) }
-    fun setAutoUpdate(value: Boolean) = viewModelScope.launch { settings.setAutoUpdateCheck(value) }
+        fun setDefaultExtension(id: String?) = viewModelScope.launch { settings.setDefaultExtensionId(id) }
 
-    fun clearCache() = viewModelScope.launch { settings.clearCache() }
+        fun setSpeed(value: Float) = viewModelScope.launch { settings.setDefaultSpeed(value) }
 
-    fun checkUpdate() {
-        checkingUpdate.value = true
-        viewModelScope.launch {
-            when (val result = updateRepository.check(force = true)) {
-                is UpdateRepository.CheckResult.Available -> {
-                    availableUpdate.value = result.release
-                    updateMessage.value = "Version ${result.release.versionName} is available"
+        fun setAdblockEnabled(value: Boolean) = viewModelScope.launch { adblockSettings.setEnabled(value) }
+
+        fun setEasyList(value: Boolean) = viewModelScope.launch { adblockSettings.setEasyListEnabled(value) }
+
+        fun setEasyPrivacy(value: Boolean) = viewModelScope.launch { adblockSettings.setEasyPrivacyEnabled(value) }
+
+        fun setAutoUpdate(value: Boolean) = viewModelScope.launch { settings.setAutoUpdateCheck(value) }
+
+        fun clearCache() = viewModelScope.launch { settings.clearCache() }
+
+        fun checkUpdate() {
+            checkingUpdate.value = true
+            viewModelScope.launch {
+                when (val result = updateRepository.check(force = true)) {
+                    is UpdateRepository.CheckResult.Available -> {
+                        availableUpdate.value = result.release
+                        updateMessage.value = "Version ${result.release.versionName} is available"
+                    }
+                    UpdateRepository.CheckResult.UpToDate -> {
+                        availableUpdate.value = null
+                        updateMessage.value = "You are on the latest version"
+                    }
+                    is UpdateRepository.CheckResult.Failed -> {
+                        availableUpdate.value = null
+                        updateMessage.value = "Update check failed: ${result.reason}"
+                    }
                 }
-                UpdateRepository.CheckResult.UpToDate -> {
-                    availableUpdate.value = null
-                    updateMessage.value = "You are on the latest version"
-                }
-                is UpdateRepository.CheckResult.Failed -> {
-                    availableUpdate.value = null
-                    updateMessage.value = "Update check failed: ${result.reason}"
-                }
-            }
-            checkingUpdate.value = false
-        }
-    }
-
-    fun skipVersion(version: String) = viewModelScope.launch { settings.setSkippedVersion(version) }
-
-    fun installUpdate(activity: android.app.Activity) {
-        val release = availableUpdate.value ?: return
-        checkingUpdate.value = true
-        viewModelScope.launch {
-            val outcome = apkInstaller.install(activity, release) { progress -> updateMessage.value = progress }
-            checkingUpdate.value = false
-            when (outcome) {
-                is io.github.tukiza7_debug.vibecast.data.remote.ApkInstaller.InstallOutcome.Success ->
-                    updateMessage.value = outcome.message
-                is io.github.tukiza7_debug.vibecast.data.remote.ApkInstaller.InstallOutcome.PendingUserAction ->
-                    updateMessage.value = outcome.message
-                is io.github.tukiza7_debug.vibecast.data.remote.ApkInstaller.InstallOutcome.Failure ->
-                    updateMessage.value = "Install failed: ${outcome.reason}"
+                checkingUpdate.value = false
             }
         }
+
+        fun skipVersion(version: String) = viewModelScope.launch { settings.setSkippedVersion(version) }
+
+        fun installUpdate(activity: android.app.Activity) {
+            val release = availableUpdate.value ?: return
+            checkingUpdate.value = true
+            viewModelScope.launch {
+                val outcome = apkInstaller.install(activity, release) { progress -> updateMessage.value = progress }
+                checkingUpdate.value = false
+                when (outcome) {
+                    is io.github.tukiza7_debug.vibecast.data.remote.ApkInstaller.InstallOutcome.Success ->
+                        updateMessage.value = outcome.message
+                    is io.github.tukiza7_debug.vibecast.data.remote.ApkInstaller.InstallOutcome.PendingUserAction ->
+                        updateMessage.value = outcome.message
+                    is io.github.tukiza7_debug.vibecast.data.remote.ApkInstaller.InstallOutcome.Failure ->
+                        updateMessage.value = "Install failed: ${outcome.reason}"
+                }
+            }
+        }
     }
-}
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
@@ -218,7 +221,10 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+private fun Section(
+    title: String,
+    content: @Composable () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleLarge)
         content()
@@ -226,7 +232,11 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SettingSwitch(
+    label: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,

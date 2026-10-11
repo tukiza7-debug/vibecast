@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SemVerTest {
-
     @Test
     fun `compares semver versions`() {
         assertTrue(SemVer.compare("1.1.0", "1.0.9") > 0)
@@ -25,8 +24,11 @@ class SemVerTest {
 }
 
 class ReleaseParserTest {
-
-    private fun releaseJson(tag: String, vararg apks: String, drafts: Boolean = false) = """
+    private fun releaseJson(
+        tag: String,
+        vararg apks: String,
+        drafts: Boolean = false,
+    ) = """
         {
           "tag_name": "$tag",
           "draft": $drafts,
@@ -36,16 +38,17 @@ class ReleaseParserTest {
             {"name": "SHA256SUMS.txt", "browser_download_url": "https://example/SHA256SUMS.txt"}
           ]
         }
-    """.trimIndent()
+        """.trimIndent()
 
     @Test
     fun `prefers the device abi`() {
-        val json = releaseJson(
-            "v1.2.0",
-            "VibeCast-1.2.0-universal.apk",
-            "VibeCast-1.2.0-arm64-v8a.apk",
-            "VibeCast-1.2.0-x86.apk",
-        )
+        val json =
+            releaseJson(
+                "v1.2.0",
+                "VibeCast-1.2.0-universal.apk",
+                "VibeCast-1.2.0-arm64-v8a.apk",
+                "VibeCast-1.2.0-x86.apk",
+            )
         val release = ReleaseParser.parse(json, "x86")
         assertEquals("VibeCast-1.2.0-x86.apk", release?.apkName)
         assertEquals("https://example/SHA256SUMS.txt", release?.checksumsUrl)

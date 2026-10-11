@@ -10,7 +10,6 @@ import androidx.media3.common.Tracks
  * pins one track of its group. Unit tested on the JVM.
  */
 object QualitySelectorLogic {
-
     data class VideoOption(
         val group: Tracks.Group,
         val trackIndex: Int,
@@ -26,13 +25,14 @@ object QualitySelectorLogic {
             for (trackIndex in 0 until group.mediaTrackGroup.length) {
                 if (group.isTrackSupported(trackIndex)) {
                     val format = group.getTrackFormat(trackIndex)
-                    options += VideoOption(
-                        group = group,
-                        trackIndex = trackIndex,
-                        label = format.height.takeIf { it > 0 }?.let { "${it}p" } ?: (format.label ?: "Track $trackIndex"),
-                        height = format.height,
-                        bitrate = format.bitrate,
-                    )
+                    options +=
+                        VideoOption(
+                            group = group,
+                            trackIndex = trackIndex,
+                            label = format.height.takeIf { it > 0 }?.let { "${it}p" } ?: (format.label ?: "Track $trackIndex"),
+                            height = format.height,
+                            bitrate = format.bitrate,
+                        )
                 }
             }
         }

@@ -2,7 +2,6 @@ package io.github.tukiza7_debug.vibecast.util
 
 /** Semver helpers for versionName comparison and extension version rules. */
 object SemVer {
-
     fun parse(versionName: String): Triple<Int, Int, Int>? {
         val core = versionName.substringBefore('-').substringBefore('+')
         val parts = core.split('.')
@@ -14,7 +13,10 @@ object SemVer {
     }
 
     /** Returns positive when a is newer than b. */
-    fun compare(a: String, b: String): Int {
+    fun compare(
+        a: String,
+        b: String,
+    ): Int {
         val pa = parse(a) ?: return 0
         val pb = parse(b) ?: return 0
         val byMajor = pa.first.compareTo(pb.first)

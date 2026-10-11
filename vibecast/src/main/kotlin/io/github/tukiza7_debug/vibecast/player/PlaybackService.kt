@@ -15,17 +15,16 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.tukiza7_debug.vibecast.MainActivity
-import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /** Holds the ExoPlayer instance and the media session; UI binds through MediaController. */
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
-
     @Inject lateinit var okHttpClient: okhttp3.OkHttpClient
 
     @Inject lateinit var headersRegistry: HeadersRegistry
@@ -41,28 +40,30 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(
-                DefaultMediaSourceFactory(HeaderProvidingDataSourceFactory(OkHttpDataSource.Factory(okHttpClient), headersRegistry)),
-            )
-            .setAudioAttributes(
-                AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
-                true,
-            )
-            .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
-            .build()
+        val player =
+            ExoPlayer.Builder(this)
+                .setMediaSourceFactory(
+                    DefaultMediaSourceFactory(HeaderProvidingDataSourceFactory(OkHttpDataSource.Factory(okHttpClient), headersRegistry)),
+                )
+                .setAudioAttributes(
+                    AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
+                    true,
+                )
+                .setHandleAudioBecomingNoisy(true)
+                .setWakeMode(C.WAKE_MODE_NETWORK)
+                .build()
         player.addListener(errorListener)
-        mediaSession = MediaSession.Builder(this, player)
-            .setSessionActivity(
-                android.app.PendingIntent.getActivity(
-                    this,
-                    0,
-                    Intent(this, MainActivity::class.java),
-                    android.app.PendingIntent.FLAG_IMMUTABLE,
-                ),
-            )
-            .build()
+        mediaSession =
+            MediaSession.Builder(this, player)
+                .setSessionActivity(
+                    android.app.PendingIntent.getActivity(
+                        this,
+                        0,
+                        Intent(this, MainActivity::class.java),
+                        android.app.PendingIntent.FLAG_IMMUTABLE,
+                    ),
+                )
+                .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
@@ -77,41 +78,43 @@ class PlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
-    private val errorListener = object : Player.Listener {
-        override fun onPlayerError(error: PlaybackException) {
-            val position = mediaSession?.player?.currentPosition ?: 0
-            val action = PlaybackRecovery.decide(
-                error.errorCode,
-                PlaybackRecovery.httpStatusCodeOf(error.cause),
-                networkRetries,
-                streamRefreshes,
-            )
-            val session = mediaSession ?: return
-            when (action) {
-                PlaybackRecovery.Action.RETRY_NETWORK -> {
-                    networkRetries++
-                    session.player.seekTo(position)
-                    session.player.prepare()
-                }
-                PlaybackRecovery.Action.RESOLVE_STREAM_AGAIN -> {
-                    streamRefreshes++
-                    scope.launch {
-                        val mediaId = session.player.currentMediaItem?.mediaId
-                        val refreshed = if (mediaId == null) false else connection.refreshStream(mediaId, position)
-                        if (!refreshed) connection.notifyPlaybackError("stream expired and could not be refreshed")
+    private val errorListener =
+        object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                val position = mediaSession?.player?.currentPosition ?: 0
+                val action =
+                    PlaybackRecovery.decide(
+                        error.errorCode,
+                        PlaybackRecovery.httpStatusCodeOf(error.cause),
+                        networkRetries,
+                        streamRefreshes,
+                    )
+                val session = mediaSession ?: return
+                when (action) {
+                    PlaybackRecovery.Action.RETRY_NETWORK -> {
+                        networkRetries++
+                        session.player.seekTo(position)
+                        session.player.prepare()
                     }
+                    PlaybackRecovery.Action.RESOLVE_STREAM_AGAIN -> {
+                        streamRefreshes++
+                        scope.launch {
+                            val mediaId = session.player.currentMediaItem?.mediaId
+                            val refreshed = if (mediaId == null) false else connection.refreshStream(mediaId, position)
+                            if (!refreshed) connection.notifyPlaybackError("stream expired and could not be refreshed")
+                        }
+                    }
+                    PlaybackRecovery.Action.FAIL -> connection.notifyPlaybackError(error.message ?: "playback failed")
                 }
-                PlaybackRecovery.Action.FAIL -> connection.notifyPlaybackError(error.message ?: "playback failed")
             }
-        }
 
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_READY) {
-                networkRetries = 0
-                streamRefreshes = 0
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    networkRetries = 0
+                    streamRefreshes = 0
+                }
             }
         }
-    }
 }
 
 /** Applies per-stream headers to every request the player makes for that stream. */
@@ -119,7 +122,6 @@ class HeaderProvidingDataSourceFactory(
     private val upstream: OkHttpDataSource.Factory,
     private val registry: HeadersRegistry,
 ) : DataSource.Factory {
-
     override fun createDataSource(): DataSource = HeaderDataSource(upstream.createDataSource(), registry)
 }
 
@@ -127,17 +129,17 @@ private class HeaderDataSource(
     private val wrapped: DataSource,
     private val registry: HeadersRegistry,
 ) : DataSource by wrapped {
-
     override fun open(dataSpec: DataSpec): Long {
         val host = HeadersRegistry.hostOf(dataSpec.uri.toString())
         val headers = registry.headersFor(host)
-        val effective = if (headers.isEmpty()) {
-            dataSpec
-        } else {
-            val merged = HashMap(headers)
-            merged.putAll(dataSpec.httpRequestHeaders)
-            dataSpec.buildUpon().setHttpRequestHeaders(merged).build()
-        }
+        val effective =
+            if (headers.isEmpty()) {
+                dataSpec
+            } else {
+                val merged = HashMap(headers)
+                merged.putAll(dataSpec.httpRequestHeaders)
+                dataSpec.buildUpon().setHttpRequestHeaders(merged).build()
+            }
         return wrapped.open(effective)
     }
 

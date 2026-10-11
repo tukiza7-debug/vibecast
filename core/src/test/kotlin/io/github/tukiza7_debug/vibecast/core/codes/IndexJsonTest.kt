@@ -6,7 +6,6 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class IndexJsonTest {
-
     @Test
     fun `parses a valid index`() {
         val index = IndexJson.parse(Fixtures.read("index-sample.json"))
@@ -46,11 +45,12 @@ class IndexJsonTest {
 
     @Test
     fun `encode and decode roundtrip`() {
-        val index = ExtensionIndex(
-            schemaVersion = 1,
-            name = "Repo",
-            extensions = listOf(IndexEntry(file = "a.json", sha256 = "ff"), IndexEntry(file = "b.json")),
-        )
+        val index =
+            ExtensionIndex(
+                schemaVersion = 1,
+                name = "Repo",
+                extensions = listOf(IndexEntry(file = "a.json", sha256 = "ff"), IndexEntry(file = "b.json")),
+            )
         assertEquals(index.extensions, IndexJson.parse(IndexJson.encode(index)).extensions)
     }
 }

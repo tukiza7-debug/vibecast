@@ -4,7 +4,6 @@ import android.app.Activity
 import android.media.AudioManager
 import android.view.WindowManager
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -50,27 +48,27 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
 import androidx.media3.common.TrackSelectionOverride
-import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.player.PlayerConnection
 import io.github.tukiza7_debug.vibecast.player.QualitySelectorLogic
 import io.github.tukiza7_debug.vibecast.ui.detail.formatMs
-import javax.inject.Inject
-import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import javax.inject.Inject
+import kotlin.math.abs
 
 @HiltViewModel
-class PlayerViewModel @Inject constructor(
-    val playerConnection: PlayerConnection,
-) : ViewModel()
+class PlayerViewModel
+    @Inject
+    constructor(
+        val playerConnection: PlayerConnection,
+    ) : ViewModel()
 
 @Composable
 fun PlayerScreen(
@@ -108,9 +106,10 @@ fun PlayerScreen(
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black),
     ) {
         AndroidView(
             factory = { ctx ->
@@ -120,48 +119,49 @@ fun PlayerScreen(
                 }
             },
             update = { view -> view.player = controller },
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (fullscreen) {
-                        Modifier
-                    } else {
-                        Modifier.align(Alignment.Center).fillMaxWidth().aspectRatio(16f / 9f)
-                    },
-                )
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { controlsVisible = !controlsVisible },
-                        onDoubleTap = {
-                            // Double tap seeks 10 seconds in the tapped direction.
-                            val forward = it.x > size.width / 2
-                            viewModel.viewModelScope.launch {
-                                connection.seekTo(
-                                    (if (forward) position + 10_000 else position - 10_000).coerceIn(0, duration),
-                                )
-                            }
-                            seekHint = if (forward) "+10s" else "-10s"
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (fullscreen) {
+                            Modifier
+                        } else {
+                            Modifier.align(Alignment.Center).fillMaxWidth().aspectRatio(16f / 9f)
                         },
                     )
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        val horizontal = abs(dragAmount.x) > abs(dragAmount.y)
-                        if (horizontal) {
-                            val target = (position + dragAmount.x * 120).coerceIn(0f, duration.toFloat())
-                            viewModel.viewModelScope.launch { connection.seekTo(target.toLong()) }
-                            seekHint = formatMs(target.toLong())
-                        } else {
-                            val fraction = if (dragAmount.x > size.width / 2) -dragAmount.y else dragAmount.y
-                            if (dragAmount.y < 0) {
-                                adjustVolume(context, fraction / 12f)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { controlsVisible = !controlsVisible },
+                            onDoubleTap = {
+                                // Double tap seeks 10 seconds in the tapped direction.
+                                val forward = it.x > size.width / 2
+                                viewModel.viewModelScope.launch {
+                                    connection.seekTo(
+                                        (if (forward) position + 10_000 else position - 10_000).coerceIn(0, duration),
+                                    )
+                                }
+                                seekHint = if (forward) "+10s" else "-10s"
+                            },
+                        )
+                    }
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            val horizontal = abs(dragAmount.x) > abs(dragAmount.y)
+                            if (horizontal) {
+                                val target = (position + dragAmount.x * 120).coerceIn(0f, duration.toFloat())
+                                viewModel.viewModelScope.launch { connection.seekTo(target.toLong()) }
+                                seekHint = formatMs(target.toLong())
                             } else {
-                                adjustBrightness(context, fraction / 12f)
+                                val fraction = if (dragAmount.x > size.width / 2) -dragAmount.y else dragAmount.y
+                                if (dragAmount.y < 0) {
+                                    adjustVolume(context, fraction / 12f)
+                                } else {
+                                    adjustBrightness(context, fraction / 12f)
+                                }
                             }
                         }
-                    }
-                },
+                    },
         )
         seekHint?.let { hint ->
             Text(
@@ -208,10 +208,11 @@ fun PlayerScreen(
                     onValueChange = { fraction ->
                         viewModel.viewModelScope.launch { connection.seekTo((fraction * duration).toLong()) }
                     },
-                    colors = androidx.compose.material3.SliderDefaults.colors(
-                        thumbColor = MaterialTheme.colorScheme.primary,
-                        activeTrackColor = MaterialTheme.colorScheme.primary,
-                    ),
+                    colors =
+                        androidx.compose.material3.SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                        ),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { viewModel.viewModelScope.launch { connection.previous() } }) {
@@ -299,7 +300,10 @@ fun PlayerScreen(
     }
 }
 
-private fun adjustVolume(context: android.content.Context, delta: Float) {
+private fun adjustVolume(
+    context: android.content.Context,
+    delta: Float,
+) {
     val audio = context.getSystemService(android.content.Context.AUDIO_SERVICE) as? AudioManager ?: return
     val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
     val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
@@ -307,7 +311,10 @@ private fun adjustVolume(context: android.content.Context, delta: Float) {
     audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
 }
 
-private fun adjustBrightness(context: android.content.Context, delta: Float) {
+private fun adjustBrightness(
+    context: android.content.Context,
+    delta: Float,
+) {
     val activity = context as? Activity ?: return
     val attributes = activity.window.attributes
     val current = if (attributes.screenBrightness < 0) 0.5f else attributes.screenBrightness

@@ -11,7 +11,9 @@ data class BlockRequest(
 
 sealed class Decision {
     object Allow : Decision()
+
     data class Block(val rule: NetworkRule) : Decision()
+
     data class AllowException(val rule: NetworkRule) : Decision()
 }
 
@@ -21,7 +23,6 @@ sealed class Decision {
  * full rule list and no java.util.regex runs per request.
  */
 class UrlMatcher(rules: List<NetworkRule>) {
-
     private val hostAnchored = HashMap<String, MutableList<NetworkRule>>()
     private val hostAnchoredExceptions = HashMap<String, MutableList<NetworkRule>>()
     private val generic = ArrayList<NetworkRule>()
@@ -70,7 +71,12 @@ class UrlMatcher(rules: List<NetworkRule>) {
         return Decision.Allow
     }
 
-    private fun findBlocking(url: String, host: String, hostStart: Int, request: BlockRequest): NetworkRule? {
+    private fun findBlocking(
+        url: String,
+        host: String,
+        hostStart: Int,
+        request: BlockRequest,
+    ): NetworkRule? {
         var domain: String? = host
         while (domain != null) {
             hostAnchored[domain]?.forEach { rule ->
@@ -88,7 +94,12 @@ class UrlMatcher(rules: List<NetworkRule>) {
         return null
     }
 
-    private fun findException(url: String, host: String, hostStart: Int, request: BlockRequest): NetworkRule? {
+    private fun findException(
+        url: String,
+        host: String,
+        hostStart: Int,
+        request: BlockRequest,
+    ): NetworkRule? {
         var domain: String? = host
         while (domain != null) {
             hostAnchoredExceptions[domain]?.forEach { rule ->
@@ -163,9 +174,10 @@ class UrlMatcher(rules: List<NetworkRule>) {
     }
 
     companion object {
-        fun hostOf(url: String): String? = runCatching {
-            URI(url).host?.lowercase()
-        }.getOrNull()
+        fun hostOf(url: String): String? =
+            runCatching {
+                URI(url).host?.lowercase()
+            }.getOrNull()
 
         fun nextSuffix(host: String): String? {
             val dot = host.indexOf('.')
@@ -188,7 +200,10 @@ class UrlMatcher(rules: List<NetworkRule>) {
             return tokens
         }
 
-        private fun addToken(tokens: MutableSet<String>, token: String) {
+        private fun addToken(
+            tokens: MutableSet<String>,
+            token: String,
+        ) {
             if (token.length >= 4) tokens.add(token)
         }
 

@@ -15,23 +15,24 @@ data class GitSource(
 
     fun rawUrl(): String {
         val refPart = ref ?: "HEAD"
-        val pathPart = when (kind) {
-            Kind.SINGLE_FILE -> path ?: throw IllegalStateException("single-file source requires a path")
-            Kind.REPOSITORY -> "index.json"
-        }
+        val pathPart =
+            when (kind) {
+                Kind.SINGLE_FILE -> path ?: throw IllegalStateException("single-file source requires a path")
+                Kind.REPOSITORY -> "index.json"
+            }
         return "https://raw.githubusercontent.com/$owner/$repo/$refPart/$pathPart"
     }
 
-    fun code(): String = buildString {
-        append(if (kind == Kind.SINGLE_FILE) "gc1:" else "gx1:")
-        append(owner).append('/').append(repo)
-        path?.let { append('/').append(it) }
-        ref?.let { append('@').append(it) }
-    }
+    fun code(): String =
+        buildString {
+            append(if (kind == Kind.SINGLE_FILE) "gc1:" else "gx1:")
+            append(owner).append('/').append(repo)
+            path?.let { append('/').append(it) }
+            ref?.let { append('@').append(it) }
+        }
 }
 
 object SourceCodes {
-
     const val SINGLE_PREFIX = "gc1:"
     const val REPO_PREFIX = "gx1:"
 
@@ -41,11 +42,12 @@ object SourceCodes {
 
     fun parse(code: String): GitSource {
         val trimmed = code.trim()
-        val (prefix, kind, rest) = when {
-            trimmed.startsWith(SINGLE_PREFIX) -> Triple(SINGLE_PREFIX, GitSource.Kind.SINGLE_FILE, trimmed.removePrefix(SINGLE_PREFIX))
-            trimmed.startsWith(REPO_PREFIX) -> Triple(REPO_PREFIX, GitSource.Kind.REPOSITORY, trimmed.removePrefix(REPO_PREFIX))
-            else -> throw CodeException("not a gc1 or gx1 code")
-        }
+        val (prefix, kind, rest) =
+            when {
+                trimmed.startsWith(SINGLE_PREFIX) -> Triple(SINGLE_PREFIX, GitSource.Kind.SINGLE_FILE, trimmed.removePrefix(SINGLE_PREFIX))
+                trimmed.startsWith(REPO_PREFIX) -> Triple(REPO_PREFIX, GitSource.Kind.REPOSITORY, trimmed.removePrefix(REPO_PREFIX))
+                else -> throw CodeException("not a gc1 or gx1 code")
+            }
         val (location, ref) = splitRef(rest, prefix)
         val rawSegments = location.split('/')
         if (rawSegments.any { it.isEmpty() }) throw CodeException("$prefix must not contain empty path segments")
@@ -72,7 +74,10 @@ object SourceCodes {
         }
     }
 
-    private fun splitRef(rest: String, prefix: String): Pair<String, String?> {
+    private fun splitRef(
+        rest: String,
+        prefix: String,
+    ): Pair<String, String?> {
         val at = rest.indexOf('@')
         return if (at < 0) {
             rest to null
@@ -85,10 +90,10 @@ object SourceCodes {
 }
 
 object CodeDetector {
-
-    private val codeRegex = Regex(
-        "(unix1:[A-Za-z0-9_-]+\\.[0-9a-fA-F]{8}|gc1:[A-Za-z0-9._@/-]+|gx1:[A-Za-z0-9._@/-]+)",
-    )
+    private val codeRegex =
+        Regex(
+            "(unix1:[A-Za-z0-9_-]+\\.[0-9a-fA-F]{8}|gc1:[A-Za-z0-9._@/-]+|gx1:[A-Za-z0-9._@/-]+)",
+        )
 
     /** Finds the first extension code embedded in arbitrary shared text. */
     fun findInText(text: String): String? {

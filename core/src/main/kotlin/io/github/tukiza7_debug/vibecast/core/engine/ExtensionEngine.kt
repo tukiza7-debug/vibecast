@@ -15,13 +15,13 @@ import io.github.tukiza7_debug.vibecast.core.model.SearchItem
 import io.github.tukiza7_debug.vibecast.core.model.StreamRef
 import io.github.tukiza7_debug.vibecast.core.model.SubtitleTrack
 import io.github.tukiza7_debug.vibecast.core.model.VideoStep
-import java.io.IOException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+import java.io.IOException
 
 /**
  * Executes extension steps against real network sources. All methods block, so callers
@@ -32,29 +32,44 @@ class ExtensionEngine(
     private val hostFilter: HostFilter = NoopHostFilter,
     private val sniffer: WebSniffer? = null,
 ) {
-
-    fun search(extension: Extension, query: String, page: Int): List<SearchItem> =
+    fun search(
+        extension: Extension,
+        query: String,
+        page: Int,
+    ): List<SearchItem> =
         runItems(extension, extension.search, "search", mapOf("query" to query, "page" to page.toString()))
             .map { SearchItem(title = it.required("search", "title"), url = it.required("search", "url"), cover = it["cover"]) }
 
-    fun latest(extension: Extension, page: Int): List<SearchItem> {
+    fun latest(
+        extension: Extension,
+        page: Int,
+    ): List<SearchItem> {
         val step = requireStep(extension.latest, "latest")
         return runItems(extension, step, "latest", mapOf("page" to page.toString()))
             .map { SearchItem(title = it.required("latest", "title"), url = it.required("latest", "url"), cover = it["cover"]) }
     }
 
-    fun popular(extension: Extension, page: Int): List<SearchItem> {
+    fun popular(
+        extension: Extension,
+        page: Int,
+    ): List<SearchItem> {
         val step = requireStep(extension.popular, "popular")
         return runItems(extension, step, "popular", mapOf("page" to page.toString()))
             .map { SearchItem(title = it.required("popular", "title"), url = it.required("popular", "url"), cover = it["cover"]) }
     }
 
-    fun detail(extension: Extension, itemUrl: String): DetailResult {
+    fun detail(
+        extension: Extension,
+        itemUrl: String,
+    ): DetailResult {
         val raw = runItems(extension, extension.detail, "detail", mapOf("url" to itemUrl)).firstOrNull().orEmpty()
         return DetailResult(title = raw["title"], cover = raw["cover"], synopsis = raw["synopsis"])
     }
 
-    fun episodes(extension: Extension, itemUrl: String): List<Episode> {
+    fun episodes(
+        extension: Extension,
+        itemUrl: String,
+    ): List<Episode> {
         val items = runItems(extension, extension.episodes, "episodes", mapOf("url" to itemUrl))
         if (items.isEmpty()) throw EngineException("episodes", "source", "no episodes found at $itemUrl")
         return items.mapIndexed { index, map ->
@@ -66,32 +81,38 @@ class ExtensionEngine(
         }
     }
 
-    fun video(extension: Extension, episodeUrl: String): StreamRef {
+    fun video(
+        extension: Extension,
+        episodeUrl: String,
+    ): StreamRef {
         val step = extension.video
         val headers = extension.headers + step.headers
         val pageUrl = UrlResolver.resolveTemplate(step.request.url, extension.baseUrl, mapOf("url" to episodeUrl))
-        val resolved = when (step.strategy) {
-            STRATEGY_DIRECT -> resolveDirect(step, extension.baseUrl, episodeUrl, headers)
-            STRATEGY_REGEX -> resolveRegex(step, pageUrl, headers)
-            STRATEGY_IFRAME -> resolveIframe(step, pageUrl, headers)
-            STRATEGY_WEBVIEW -> return resolveWithSniffer(step, pageUrl, headers)
-            else -> throw EngineException("video", "strategy", "unknown strategy '${step.strategy}'")
-        }
+        val resolved =
+            when (step.strategy) {
+                STRATEGY_DIRECT -> resolveDirect(step, extension.baseUrl, episodeUrl, headers)
+                STRATEGY_REGEX -> resolveRegex(step, pageUrl, headers)
+                STRATEGY_IFRAME -> resolveIframe(step, pageUrl, headers)
+                STRATEGY_WEBVIEW -> return resolveWithSniffer(step, pageUrl, headers)
+                else -> throw EngineException("video", "strategy", "unknown strategy '${step.strategy}'")
+            }
         val finalHeaders = resolved.referer?.let { headers + mapOf("Referer" to it) } ?: headers
-        val mimeType = when {
-            MimeInference.fromUrl(resolved.url) != null -> MimeInference.fromUrl(resolved.url)
-            resolved.probeDone -> resolved.probedMime
-            else -> probeMimeType(resolved.url, finalHeaders, step.timeoutMs)
-        }
+        val mimeType =
+            when {
+                MimeInference.fromUrl(resolved.url) != null -> MimeInference.fromUrl(resolved.url)
+                resolved.probeDone -> resolved.probedMime
+                else -> probeMimeType(resolved.url, finalHeaders, step.timeoutMs)
+            }
         return StreamRef(
             url = resolved.url,
             mimeType = mimeType,
             headers = finalHeaders,
             quality = extractFromPage(resolved.contextText, resolved.referer ?: pageUrl, step.quality, "video", "quality"),
-            subtitles = step.subtitles.mapNotNull { spec ->
-                val url = extractFromPage(resolved.contextText, pageUrl, spec.url, "video", "subtitles") ?: return@mapNotNull null
-                SubtitleTrack(UrlResolver.absolutize(url, pageUrl), spec.language, spec.label)
-            },
+            subtitles =
+                step.subtitles.mapNotNull { spec ->
+                    val url = extractFromPage(resolved.contextText, pageUrl, spec.url, "video", "subtitles") ?: return@mapNotNull null
+                    SubtitleTrack(UrlResolver.absolutize(url, pageUrl), spec.language, spec.label)
+                },
         )
     }
 
@@ -106,45 +127,63 @@ class ExtensionEngine(
         return ResolvedStream(url = url, contextText = null, referer = null, probedMime = probedMime, probeDone = true)
     }
 
-    private fun resolveRegex(step: VideoStep, pageUrl: String, headers: Map<String, String>): ResolvedStream {
+    private fun resolveRegex(
+        step: VideoStep,
+        pageUrl: String,
+        headers: Map<String, String>,
+    ): ResolvedStream {
         val pattern = requirePattern(step)
         val text = fetchText(pageUrl, headers, step.timeoutMs)
-        val found = runRegex(pattern, text)
-            ?: throw EngineException("video", "pattern", "pattern did not match page $pageUrl")
+        val found =
+            runRegex(pattern, text)
+                ?: throw EngineException("video", "pattern", "pattern did not match page $pageUrl")
         return ResolvedStream(UrlResolver.absolutize(found, pageUrl), text, null)
     }
 
-    private fun resolveIframe(step: VideoStep, pageUrl: String, headers: Map<String, String>): ResolvedStream {
+    private fun resolveIframe(
+        step: VideoStep,
+        pageUrl: String,
+        headers: Map<String, String>,
+    ): ResolvedStream {
         val doc = Jsoup.parse(fetchText(pageUrl, headers, step.timeoutMs), pageUrl)
-        val iframe = doc.selectFirst(step.selector ?: "iframe")
-            ?: throw EngineException("video", "selector", "no iframe matched '${step.selector ?: "iframe"}' on $pageUrl")
+        val iframe =
+            doc.selectFirst(step.selector ?: "iframe")
+                ?: throw EngineException("video", "selector", "no iframe matched '${step.selector ?: "iframe"}' on $pageUrl")
         val src = iframe.absUrl("src").ifEmpty { iframe.absUrl("data-src") }
         if (src.isEmpty()) throw EngineException("video", "selector", "iframe has no src attribute")
         if (MimeInference.fromUrl(src) != null) return ResolvedStream(src, null, pageUrl)
-        val pattern = step.pattern ?: throw EngineException(
-            "video",
-            "strategy",
-            "iframe src $src is an embed page; add a pattern or use webviewSniff",
-        )
+        val pattern =
+            step.pattern ?: throw EngineException(
+                "video",
+                "strategy",
+                "iframe src $src is an embed page; add a pattern or use webviewSniff",
+            )
         val embedHeaders = headers + mapOf("Referer" to pageUrl)
         val embedText = fetchText(src, embedHeaders, step.timeoutMs)
-        val found = runRegex(pattern, embedText)
-            ?: throw EngineException("video", "pattern", "pattern did not match embed page $src")
+        val found =
+            runRegex(pattern, embedText)
+                ?: throw EngineException("video", "pattern", "pattern did not match embed page $src")
         return ResolvedStream(UrlResolver.absolutize(found, src), embedText, src)
     }
 
-    private fun resolveWithSniffer(step: VideoStep, pageUrl: String, headers: Map<String, String>): StreamRef {
-        val snifferImpl = sniffer ?: throw SniffingUnavailableException(
-            "webviewSniff needs a WebView host; this environment cannot load embed pages",
-        )
-        return when (val outcome = snifferImpl.sniff(pageUrl, headers, step.timeoutMs)) {
-            is SniffOutcome.Found -> StreamRef(
-                url = outcome.url,
-                mimeType = outcome.mimeType ?: MimeInference.fromUrl(outcome.url),
-                headers = headers + outcome.requestHeaders,
-                quality = extractFromPage(null, pageUrl, step.quality, "video", "quality"),
-                subtitles = emptyList(),
+    private fun resolveWithSniffer(
+        step: VideoStep,
+        pageUrl: String,
+        headers: Map<String, String>,
+    ): StreamRef {
+        val snifferImpl =
+            sniffer ?: throw SniffingUnavailableException(
+                "webviewSniff needs a WebView host; this environment cannot load embed pages",
             )
+        return when (val outcome = snifferImpl.sniff(pageUrl, headers, step.timeoutMs)) {
+            is SniffOutcome.Found ->
+                StreamRef(
+                    url = outcome.url,
+                    mimeType = outcome.mimeType ?: MimeInference.fromUrl(outcome.url),
+                    headers = headers + outcome.requestHeaders,
+                    quality = extractFromPage(null, pageUrl, step.quality, "video", "quality"),
+                    subtitles = emptyList(),
+                )
             is SniffOutcome.Failed -> throw EngineException(
                 "video",
                 "strategy",
@@ -161,31 +200,38 @@ class ExtensionEngine(
     ): List<Map<String, String?>> {
         val requestUrl = UrlResolver.resolveTemplate(step.request.url, extension.baseUrl, vars)
         val response = fetchChecked(requestUrl, stepName, extension.headers + step.request.headers)
-        val targets: List<Target> = when (step.source.type.lowercase()) {
-            SOURCE_HTML -> {
-                val doc = Jsoup.parse(response.bodyText(), requestUrl)
-                val selector = step.source.selector
-                val elements = if (selector.isNullOrBlank()) listOf(doc) else doc.select(selector)
-                elements.map { HtmlTarget(it) }
-            }
-            SOURCE_JSON -> {
-                val root = parseJson(response.bodyText(), stepName, requestUrl)
-                val path = step.source.path
-                val targets = when {
-                    path == null -> listOf(JsonTarget(root, root))
-                    else -> {
-                        val resolved = MiniJsonPath.resolve(root, path)
-                            ?: throw EngineException(stepName, "source", "path '$path' did not resolve in response from $requestUrl")
-                        when (resolved) {
-                            is JsonArray -> resolved.map { JsonTarget(it, root) }
-                            else -> listOf(JsonTarget(resolved, root))
-                        }
-                    }
+        val targets: List<Target> =
+            when (step.source.type.lowercase()) {
+                SOURCE_HTML -> {
+                    val doc = Jsoup.parse(response.bodyText(), requestUrl)
+                    val selector = step.source.selector
+                    val elements = if (selector.isNullOrBlank()) listOf(doc) else doc.select(selector)
+                    elements.map { HtmlTarget(it) }
                 }
-                targets
+                SOURCE_JSON -> {
+                    val root = parseJson(response.bodyText(), stepName, requestUrl)
+                    val path = step.source.path
+                    val targets =
+                        when {
+                            path == null -> listOf(JsonTarget(root, root))
+                            else -> {
+                                val resolved =
+                                    MiniJsonPath.resolve(root, path)
+                                        ?: throw EngineException(
+                                            stepName,
+                                            "source",
+                                            "path '$path' did not resolve in response from $requestUrl",
+                                        )
+                                when (resolved) {
+                                    is JsonArray -> resolved.map { JsonTarget(it, root) }
+                                    else -> listOf(JsonTarget(resolved, root))
+                                }
+                            }
+                        }
+                    targets
+                }
+                else -> throw EngineException(stepName, "source", "unknown source type '${step.source.type}'")
             }
-            else -> throw EngineException(stepName, "source", "unknown source type '${step.source.type}'")
-        }
         val filtered = applyFilter(targets, step, stepName, requestUrl)
         return filtered.map { target ->
             step.fields.mapValues { (fieldName, extraction) ->
@@ -194,14 +240,20 @@ class ExtensionEngine(
         }
     }
 
-    private fun applyFilter(targets: List<Target>, step: ListStep, stepName: String, requestUrl: String): List<Target> {
+    private fun applyFilter(
+        targets: List<Target>,
+        step: ListStep,
+        stepName: String,
+        requestUrl: String,
+    ): List<Target> {
         val field = step.source.filterField ?: return targets
         val expected = step.source.filterEquals ?: return targets
-        val extraction = if (targets.firstOrNull() is JsonTarget) {
-            FieldExtraction(path = if (field.startsWith("$")) field else "$." + field)
-        } else {
-            FieldExtraction(selector = field)
-        }
+        val extraction =
+            if (targets.firstOrNull() is JsonTarget) {
+                FieldExtraction(path = if (field.startsWith("$")) field else "$." + field)
+            } else {
+                FieldExtraction(selector = field)
+            }
         return targets.filter { extractFromTarget(it, extraction, stepName, field) == expected }
     }
 
@@ -211,18 +263,19 @@ class ExtensionEngine(
         stepName: String,
         fieldName: String,
     ): String? {
-        val raw = when (target) {
-            is HtmlTarget -> {
-                if (extraction.selector == null) return null
-                val element = target.element.selectFirst(extraction.selector) ?: return null
-                readElement(element, extraction.attribute ?: "text")
-            }
-            is JsonTarget -> {
-                val path = extraction.path ?: extraction.rootPath ?: return null
-                val source = if (extraction.path != null) target.element else target.root
-                MiniJsonPath.asString(MiniJsonPath.resolve(source, path))
-            }
-        }?.trim() ?: return null
+        val raw =
+            when (target) {
+                is HtmlTarget -> {
+                    if (extraction.selector == null) return null
+                    val element = target.element.selectFirst(extraction.selector) ?: return null
+                    readElement(element, extraction.attribute ?: "text")
+                }
+                is JsonTarget -> {
+                    val path = extraction.path ?: extraction.rootPath ?: return null
+                    val source = if (extraction.path != null) target.element else target.root
+                    MiniJsonPath.asString(MiniJsonPath.resolve(source, path))
+                }
+            }?.trim() ?: return null
         var value = transform(raw, extraction, stepName, fieldName) ?: return null
         val second = extraction.value2
         if (second != null) {
@@ -244,27 +297,38 @@ class ExtensionEngine(
             return transform("", extraction, stepName, fieldName)
         }
         if (pageText == null) return null
-        val extracted: String? = if (extraction.path != null && pageText.trimStart().startsWith("{")) {
-            val root = runCatching { Json.parseToJsonElement(pageText).jsonObject }.getOrNull()
-                ?: throw EngineException(stepName, fieldName, "page content is not a JSON object")
-            MiniJsonPath.asString(MiniJsonPath.resolve(root, extraction.path))
-        } else if (extraction.selector != null) {
-            val doc = Jsoup.parse(pageText, pageUrl)
-            readElement(doc.selectFirst(extraction.selector) ?: return null, extraction.attribute ?: "text")
-        } else {
-            null
-        }
+        val extracted: String? =
+            if (extraction.path != null && pageText.trimStart().startsWith("{")) {
+                val root =
+                    runCatching { Json.parseToJsonElement(pageText).jsonObject }.getOrNull()
+                        ?: throw EngineException(stepName, fieldName, "page content is not a JSON object")
+                MiniJsonPath.asString(MiniJsonPath.resolve(root, extraction.path))
+            } else if (extraction.selector != null) {
+                val doc = Jsoup.parse(pageText, pageUrl)
+                readElement(doc.selectFirst(extraction.selector) ?: return null, extraction.attribute ?: "text")
+            } else {
+                null
+            }
         val raw = extracted?.trim() ?: return null
         return transform(raw, extraction, stepName, fieldName)
     }
 
-    private fun readElement(element: Element, attribute: String): String = when (attribute) {
-        "text" -> element.text()
-        "html" -> element.html()
-        else -> element.absUrl(attribute).ifEmpty { element.attr(attribute) }
-    }
+    private fun readElement(
+        element: Element,
+        attribute: String,
+    ): String =
+        when (attribute) {
+            "text" -> element.text()
+            "html" -> element.html()
+            else -> element.absUrl(attribute).ifEmpty { element.attr(attribute) }
+        }
 
-    private fun transform(raw: String, extraction: FieldExtraction, stepName: String, fieldName: String): String? {
+    private fun transform(
+        raw: String,
+        extraction: FieldExtraction,
+        stepName: String,
+        fieldName: String,
+    ): String? {
         var value = raw
         if (extraction.regex != null) {
             value = runRegex(extraction.regex, value, extraction.regexGroup)
@@ -274,13 +338,23 @@ class ExtensionEngine(
         return value.trim().ifBlank { null }
     }
 
-    private fun runRegex(pattern: String, text: String, group: Int = 1): String? = try {
-        Regex(pattern).find(text)?.groups?.get(group)?.value
-    } catch (e: Exception) {
-        throw EngineException("video", "pattern", "invalid regex '$pattern': ${e.message}", e)
-    }
+    private fun runRegex(
+        pattern: String,
+        text: String,
+        group: Int = 1,
+    ): String? =
+        try {
+            Regex(pattern).find(text)?.groups?.get(group)?.value
+        } catch (e: Exception) {
+            throw EngineException("video", "pattern", "invalid regex '$pattern': ${e.message}", e)
+        }
 
-    private fun fetchText(url: String, headers: Map<String, String>, timeoutMs: Long, stepName: String = "video"): String {
+    private fun fetchText(
+        url: String,
+        headers: Map<String, String>,
+        timeoutMs: Long,
+        stepName: String = "video",
+    ): String {
         val response = fetchChecked(url, stepName, headers, timeoutMs)
         return response.bodyText()
     }
@@ -292,21 +366,27 @@ class ExtensionEngine(
         timeoutMs: Long = DEFAULT_TIMEOUT_MS,
     ): HttpResponse {
         if (hostFilter.isBlocked(url)) throw EngineException(stepName, "request", "request to blocked host: $url")
-        val response = try {
-            http.fetch(HttpRequest(url, "GET", extraHeaders, timeoutMs))
-        } catch (e: IOException) {
-            throw EngineException(stepName, "request", "network error for $url: ${e.message}", e)
-        }
+        val response =
+            try {
+                http.fetch(HttpRequest(url, "GET", extraHeaders, timeoutMs))
+            } catch (e: IOException) {
+                throw EngineException(stepName, "request", "network error for $url: ${e.message}", e)
+            }
         if (response.code !in 200..399) throw EngineException(stepName, "request", "HTTP ${response.code} for $url")
         return response
     }
 
-    private fun probeMimeType(url: String, headers: Map<String, String>, timeoutMs: Long): String? {
-        val response = try {
-            http.fetch(HttpRequest(url, "HEAD", headers, timeoutMs))
-        } catch (e: IOException) {
-            throw EngineException("video", "request", "media URL unreachable: ${e.message}", e)
-        }
+    private fun probeMimeType(
+        url: String,
+        headers: Map<String, String>,
+        timeoutMs: Long,
+    ): String? {
+        val response =
+            try {
+                http.fetch(HttpRequest(url, "HEAD", headers, timeoutMs))
+            } catch (e: IOException) {
+                throw EngineException("video", "request", "media URL unreachable: ${e.message}", e)
+            }
         return when (response.code) {
             in 200..399 -> MimeInference.normalize(response.contentType)
             403, 405, 501 -> null
@@ -314,19 +394,29 @@ class ExtensionEngine(
         }
     }
 
-    private fun parseJson(text: String, stepName: String, url: String): JsonElement = try {
-        Json.parseToJsonElement(text)
-    } catch (e: Exception) {
-        throw EngineException(stepName, "source", "malformed JSON from $url: ${e.message}", e)
-    }
+    private fun parseJson(
+        text: String,
+        stepName: String,
+        url: String,
+    ): JsonElement =
+        try {
+            Json.parseToJsonElement(text)
+        } catch (e: Exception) {
+            throw EngineException(stepName, "source", "malformed JSON from $url: ${e.message}", e)
+        }
 
-    private fun requireStep(step: ListStep?, name: String): ListStep =
-        step ?: throw EngineException(name, null, "step is not defined in this extension")
+    private fun requireStep(
+        step: ListStep?,
+        name: String,
+    ): ListStep = step ?: throw EngineException(name, null, "step is not defined in this extension")
 
     private fun requirePattern(step: VideoStep): String =
         step.pattern ?: throw EngineException("video", "pattern", "regex strategy requires a pattern")
 
-    private fun Map<String, String?>.required(step: String, field: String): String =
+    private fun Map<String, String?>.required(
+        step: String,
+        field: String,
+    ): String =
         this[field]?.takeIf { it.isNotBlank() }
             ?: throw EngineException(step, field, "field mapping produced no value")
 

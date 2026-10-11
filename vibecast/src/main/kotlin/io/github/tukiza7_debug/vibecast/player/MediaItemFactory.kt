@@ -13,17 +13,17 @@ import io.github.tukiza7_debug.vibecast.core.model.StreamRef
  * whenever it is known or inferable, so HLS/DASH work even on extensionless URLs.
  */
 object MediaItemFactory {
-
-    fun media3MimeType(mime: String?): String? = when (mime?.lowercase()) {
-        "application/x-mpegurl", "application/vnd.apple.mpegurl", "audio/mpegurl", "audio/x-mpegurl" -> MimeTypes.APPLICATION_M3U8
-        "application/dash+xml" -> MimeTypes.APPLICATION_MPD
-        "video/mp4", "video/mp4v-es", null -> if (mime == null) null else MimeTypes.VIDEO_MP4
-        "video/webm" -> MimeTypes.VIDEO_WEBM
-        "video/mp2t" -> MimeTypes.VIDEO_MP2T
-        "text/vtt" -> MimeTypes.TEXT_VTT
-        "application/x-subrip" -> MimeTypes.APPLICATION_SUBRIP
-        else -> null
-    }
+    fun media3MimeType(mime: String?): String? =
+        when (mime?.lowercase()) {
+            "application/x-mpegurl", "application/vnd.apple.mpegurl", "audio/mpegurl", "audio/x-mpegurl" -> MimeTypes.APPLICATION_M3U8
+            "application/dash+xml" -> MimeTypes.APPLICATION_MPD
+            "video/mp4", "video/mp4v-es", null -> if (mime == null) null else MimeTypes.VIDEO_MP4
+            "video/webm" -> MimeTypes.VIDEO_WEBM
+            "video/mp2t" -> MimeTypes.VIDEO_MP2T
+            "text/vtt" -> MimeTypes.TEXT_VTT
+            "application/x-subrip" -> MimeTypes.APPLICATION_SUBRIP
+            else -> null
+        }
 
     fun build(
         streamRef: StreamRef,
@@ -32,27 +32,29 @@ object MediaItemFactory {
         subtitleLabel: String?,
     ): MediaItem {
         val mimeType = resolveMimeType(streamRef)
-        val builder = MediaItem.Builder()
-            .setMediaId(mediaId)
-            .setUri(Uri.parse(streamRef.url))
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setArtist(subtitleLabel)
-                    .build(),
-            )
+        val builder =
+            MediaItem.Builder()
+                .setMediaId(mediaId)
+                .setUri(Uri.parse(streamRef.url))
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(title)
+                        .setArtist(subtitleLabel)
+                        .build(),
+                )
         if (mimeType != null) {
             builder.setMimeType(mimeType)
         }
         if (streamRef.subtitles.isNotEmpty()) {
-            val configs = streamRef.subtitles.map { track ->
-                MediaItem.SubtitleConfiguration.Builder(Uri.parse(track.url))
-                    .setMimeType(media3MimeType(trackMime(track.url)) ?: MimeTypes.TEXT_VTT)
-                    .setLanguage(track.language.ifBlank { null })
-                    .setLabel(track.label.ifBlank { track.language.ifBlank { "Subtitles" } })
-                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                    .build()
-            }
+            val configs =
+                streamRef.subtitles.map { track ->
+                    MediaItem.SubtitleConfiguration.Builder(Uri.parse(track.url))
+                        .setMimeType(media3MimeType(trackMime(track.url)) ?: MimeTypes.TEXT_VTT)
+                        .setLanguage(track.language.ifBlank { null })
+                        .setLabel(track.label.ifBlank { track.language.ifBlank { "Subtitles" } })
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build()
+                }
             builder.setSubtitleConfigurations(configs)
         }
         return builder.build()
@@ -69,9 +71,10 @@ object MediaItemFactory {
         return media3MimeType(streamRef.mimeType)
     }
 
-    private fun trackMime(url: String): String? = when {
-        url.substringBefore('?').endsWith(".vtt") -> "text/vtt"
-        url.substringBefore('?').endsWith(".srt") -> "application/x-subrip"
-        else -> null
-    }
+    private fun trackMime(url: String): String? =
+        when {
+            url.substringBefore('?').endsWith(".vtt") -> "text/vtt"
+            url.substringBefore('?').endsWith(".srt") -> "application/x-subrip"
+            else -> null
+        }
 }

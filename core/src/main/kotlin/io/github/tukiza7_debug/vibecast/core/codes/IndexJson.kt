@@ -33,20 +33,21 @@ data class IndexEntry(
 }
 
 object IndexJson {
+    val json =
+        Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = false
+            explicitNulls = false
+        }
 
-    val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = false
-        explicitNulls = false
-    }
-
-    fun parse(text: String): ExtensionIndex = try {
-        json.decodeFromString(ExtensionIndex.serializer(), text)
-    } catch (e: CodeException) {
-        throw e
-    } catch (e: Exception) {
-        throw CodeException("malformed index.json: ${e.message}")
-    }
+    fun parse(text: String): ExtensionIndex =
+        try {
+            json.decodeFromString(ExtensionIndex.serializer(), text)
+        } catch (e: CodeException) {
+            throw e
+        } catch (e: Exception) {
+            throw CodeException("malformed index.json: ${e.message}", e)
+        }
 
     fun encode(index: ExtensionIndex): String = json.encodeToString(ExtensionIndex.serializer(), index)
 }

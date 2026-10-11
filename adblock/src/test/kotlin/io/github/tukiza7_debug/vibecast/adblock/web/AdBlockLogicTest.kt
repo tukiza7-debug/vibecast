@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PopupGuardTest {
-
     @Test
     fun `window creation without gesture is blocked`() {
         assertEquals(PopupGuard.Action.BLOCK, PopupGuard.onCreateWindow(false))
@@ -49,8 +48,10 @@ class PopupGuardTest {
 }
 
 class FilterEngineTest {
-
-    private fun engineWith(rules: String, custom: String = ""): FilterEngine {
+    private fun engineWith(
+        rules: String,
+        custom: String = "",
+    ): FilterEngine {
         val engine = FilterEngine()
         engine.replace(
             FilterEngine.Lists(easyList = rules, easyPrivacy = null, customRules = custom),
@@ -62,10 +63,11 @@ class FilterEngineTest {
     @Test
     fun `replace swaps state atomically and counters increment`() {
         val engine = engineWith("||ads.example.com^")
-        val decision = engine.decide(
-            io.github.tukiza7_debug.vibecast.adblock.rules.BlockRequest("https://ads.example.com/x", "news.com", null),
-            SitePolicy(),
-        )
+        val decision =
+            engine.decide(
+                io.github.tukiza7_debug.vibecast.adblock.rules.BlockRequest("https://ads.example.com/x", "news.com", null),
+                SitePolicy(),
+            )
         assertTrue(decision is io.github.tukiza7_debug.vibecast.adblock.rules.Decision.Block)
         assertEquals(1L, engine.blockedRequests.get())
     }
@@ -74,10 +76,11 @@ class FilterEngineTest {
     fun `bypass hosts are never blocked`() {
         val engine = engineWith("||cdn.media^")
         val policy = SitePolicy(bypassHosts = setOf("cdn.media"))
-        val decision = engine.decide(
-            io.github.tukiza7_debug.vibecast.adblock.rules.BlockRequest("https://cdn.media/video.m3u8", "news.com", null),
-            policy,
-        )
+        val decision =
+            engine.decide(
+                io.github.tukiza7_debug.vibecast.adblock.rules.BlockRequest("https://cdn.media/video.m3u8", "news.com", null),
+                policy,
+            )
         assertTrue(decision is io.github.tukiza7_debug.vibecast.adblock.rules.Decision.Allow)
     }
 
@@ -85,10 +88,11 @@ class FilterEngineTest {
     fun `per-site disable stops filtering for that page`() {
         val engine = engineWith("||ads.example.com^")
         val policy = SitePolicy(disabledHosts = setOf("news.com"))
-        val decision = engine.decide(
-            io.github.tukiza7_debug.vibecast.adblock.rules.BlockRequest("https://ads.example.com/x", "news.com", null),
-            policy,
-        )
+        val decision =
+            engine.decide(
+                io.github.tukiza7_debug.vibecast.adblock.rules.BlockRequest("https://ads.example.com/x", "news.com", null),
+                policy,
+            )
         assertTrue(decision is io.github.tukiza7_debug.vibecast.adblock.rules.Decision.Allow)
     }
 
@@ -136,7 +140,6 @@ class FilterEngineTest {
 }
 
 class SniffRequestJudgeTest {
-
     @Test
     fun `media urls are detected by path and query`() {
         assertTrue(SniffRequestJudge.isMediaUrl("https://cdn.example/hls/master.m3u8"))

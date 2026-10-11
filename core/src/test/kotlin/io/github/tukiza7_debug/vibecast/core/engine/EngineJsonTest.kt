@@ -13,7 +13,6 @@ import org.junit.Before
 import org.junit.Test
 
 class EngineJsonTest {
-
     private lateinit var server: MockWebServer
     private lateinit var engine: ExtensionEngine
     private lateinit var extension: io.github.tukiza7_debug.vibecast.core.model.Extension
@@ -24,8 +23,9 @@ class EngineJsonTest {
         server.start()
         engine = ExtensionEngine(OkHttpFetcher(OkHttpClient()))
         val json = TestExtensions.jsonSource(server.url("/").toString())
-        extension = io.github.tukiza7_debug.vibecast.core.validate.SchemaValidator
-            .decodeAndValidate(json)
+        extension =
+            io.github.tukiza7_debug.vibecast.core.validate.SchemaValidator
+                .decodeAndValidate(json)
     }
 
     @After
@@ -33,7 +33,10 @@ class EngineJsonTest {
         server.shutdown()
     }
 
-    private fun enqueue(body: String, contentType: String = "application/json") {
+    private fun enqueue(
+        body: String,
+        contentType: String = "application/json",
+    ) {
         server.enqueue(
             MockResponse().setResponseCode(200).setHeader("Content-Type", contentType).setBody(body),
         )

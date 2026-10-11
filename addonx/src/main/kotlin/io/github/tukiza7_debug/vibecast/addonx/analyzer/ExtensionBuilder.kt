@@ -11,7 +11,6 @@ import kotlinx.serialization.json.JsonPrimitive
  * in what the user actually assigned rather than invented defaults.
  */
 object ExtensionBuilder {
-
     data class StepDraft(
         val name: String,
         val requestUrl: String,
@@ -52,21 +51,23 @@ object ExtensionBuilder {
         val video: VideoDraft,
     )
 
-    private val json = Json {
-        prettyPrint = true
-        encodeDefaults = false
-        explicitNulls = false
-    }
+    private val json =
+        Json {
+            prettyPrint = true
+            encodeDefaults = false
+            explicitNulls = false
+        }
 
     fun build(draft: Draft): String {
-        val root = linkedMapOf<String, Any?>(
-            "schemaVersion" to 1,
-            "id" to draft.id,
-            "name" to draft.name,
-            "version" to draft.version,
-            "lang" to draft.lang,
-            "baseUrl" to draft.baseUrl,
-        )
+        val root =
+            linkedMapOf<String, Any?>(
+                "schemaVersion" to 1,
+                "id" to draft.id,
+                "name" to draft.name,
+                "version" to draft.version,
+                "lang" to draft.lang,
+                "baseUrl" to draft.baseUrl,
+            )
         if (draft.headers.isNotEmpty()) root["headers"] = draft.headers
         root["search"] = stepJson(draft.search)
         draft.latest?.let { root["latest"] = stepJson(it) }
@@ -79,43 +80,48 @@ object ExtensionBuilder {
         )
     }
 
-    private fun stepJson(step: StepDraft): Map<String, Any?> = linkedMapOf(
-        "request" to linkedMapOf<String, Any?>("url" to step.requestUrl),
-        "source" to buildMap<String, Any?> {
-            put("type", step.sourceType)
-            step.itemSelector?.let { put("selector", it) }
-            step.jsonPath?.let { put("path", it) }
-        },
-        "fields" to step.fields.mapValues { (_, field) -> fieldJson(field) },
-    )
+    private fun stepJson(step: StepDraft): Map<String, Any?> =
+        linkedMapOf(
+            "request" to linkedMapOf<String, Any?>("url" to step.requestUrl),
+            "source" to
+                buildMap<String, Any?> {
+                    put("type", step.sourceType)
+                    step.itemSelector?.let { put("selector", it) }
+                    step.jsonPath?.let { put("path", it) }
+                },
+            "fields" to step.fields.mapValues { (_, field) -> fieldJson(field) },
+        )
 
-    private fun fieldJson(field: FieldDraft): Map<String, Any?> = buildMap {
-        field.selector?.let { put("selector", it) }
-        field.attribute?.takeIf { it != "text" }?.let { put("attribute", it) }
-        field.path?.let { put("path", it) }
-        field.template?.let { put("template", it) }
-        field.regex?.let { put("regex", it) }
-    }
+    private fun fieldJson(field: FieldDraft): Map<String, Any?> =
+        buildMap {
+            field.selector?.let { put("selector", it) }
+            field.attribute?.takeIf { it != "text" }?.let { put("attribute", it) }
+            field.path?.let { put("path", it) }
+            field.template?.let { put("template", it) }
+            field.regex?.let { put("regex", it) }
+        }
 
-    private fun videoJson(video: VideoDraft): Map<String, Any?> = buildMap {
-        put("request", linkedMapOf<String, Any?>("url" to video.requestUrl))
-        put("strategy", video.strategy)
-        video.selector?.let { put("selector", it) }
-        video.pattern?.let { put("pattern", it) }
-        if (video.headers.isNotEmpty()) put("headers", video.headers)
-        put("timeoutMs", video.timeoutMs)
-    }
+    private fun videoJson(video: VideoDraft): Map<String, Any?> =
+        buildMap {
+            put("request", linkedMapOf<String, Any?>("url" to video.requestUrl))
+            put("strategy", video.strategy)
+            video.selector?.let { put("selector", it) }
+            video.pattern?.let { put("pattern", it) }
+            if (video.headers.isNotEmpty()) put("headers", video.headers)
+            put("timeoutMs", video.timeoutMs)
+        }
 
-    private fun anyToElement(value: Any?): kotlinx.serialization.json.JsonElement = when (value) {
-        null -> kotlinx.serialization.json.JsonNull
-        is kotlinx.serialization.json.JsonElement -> value
-        is String -> JsonPrimitive(value)
-        is Number -> JsonPrimitive(value)
-        is Boolean -> JsonPrimitive(value)
-        is Map<*, *> -> JsonObject(value.entries.associate { (k, v) -> k.toString() to anyToElement(v) })
-        is List<*> -> JsonArray(value.map { anyToElement(it) })
-        else -> JsonPrimitive(value.toString())
-    }
+    private fun anyToElement(value: Any?): kotlinx.serialization.json.JsonElement =
+        when (value) {
+            null -> kotlinx.serialization.json.JsonNull
+            is kotlinx.serialization.json.JsonElement -> value
+            is String -> JsonPrimitive(value)
+            is Number -> JsonPrimitive(value)
+            is Boolean -> JsonPrimitive(value)
+            is Map<*, *> -> JsonObject(value.entries.associate { (k, v) -> k.toString() to anyToElement(v) })
+            is List<*> -> JsonArray(value.map { anyToElement(it) })
+            else -> JsonPrimitive(value.toString())
+        }
 
     /** Derives an extension id from the site host: com.example.videos. */
     fun idForHost(baseUrl: String): String {

@@ -15,7 +15,6 @@ import org.junit.Before
 import org.junit.Test
 
 class EngineHtmlTest {
-
     private lateinit var server: MockWebServer
     private lateinit var engine: ExtensionEngine
     private lateinit var extension: io.github.tukiza7_debug.vibecast.core.model.Extension
@@ -110,12 +109,14 @@ class EngineHtmlTest {
 
     @Test(expected = EngineException::class)
     fun `blocked hosts fail the step before any network call`() {
-        val blockingEngine = ExtensionEngine(
-            OkHttpFetcher(OkHttpClient()),
-            hostFilter = object : HostFilter {
-                override fun isBlocked(url: String): Boolean = true
-            },
-        )
+        val blockingEngine =
+            ExtensionEngine(
+                OkHttpFetcher(OkHttpClient()),
+                hostFilter =
+                    object : HostFilter {
+                        override fun isBlocked(url: String): Boolean = true
+                    },
+            )
         server.enqueue(MockResponse().setResponseCode(200).setBody("should not be read"))
         blockingEngine.search(extension, "night", 1)
     }
@@ -123,11 +124,13 @@ class EngineHtmlTest {
     @Test
     fun `unknown strategy is rejected by the validator`() {
         val base = server.url("/").toString()
-        val broken = TestExtensions.htmlSource(base)
-            .replace("\"strategy\": \"regex\"", "\"strategy\": \"magic\"")
-        val error = org.junit.Assert.assertThrows(
-            io.github.tukiza7_debug.vibecast.core.codes.ExtensionValidationException::class.java,
-        ) { SchemaValidator.decodeAndValidate(broken) }
+        val broken =
+            TestExtensions.htmlSource(base)
+                .replace("\"strategy\": \"regex\"", "\"strategy\": \"magic\"")
+        val error =
+            org.junit.Assert.assertThrows(
+                io.github.tukiza7_debug.vibecast.core.codes.ExtensionValidationException::class.java,
+            ) { SchemaValidator.decodeAndValidate(broken) }
         assertTrue(error.issues.any { it.startsWith("video.strategy") })
     }
 }

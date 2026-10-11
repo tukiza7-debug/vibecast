@@ -3,8 +3,6 @@ package io.github.tukiza7_debug.vibecast.data.db
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
@@ -67,7 +65,10 @@ interface ExtensionDao {
     suspend fun delete(id: String)
 
     @Query("UPDATE extensions SET enabled = :enabled WHERE id = :id")
-    suspend fun setEnabled(id: String, enabled: Boolean)
+    suspend fun setEnabled(
+        id: String,
+        enabled: Boolean,
+    )
 }
 
 @Dao
@@ -104,6 +105,8 @@ interface HistoryDao {
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun extensionDao(): ExtensionDao
+
     abstract fun favoritesDao(): FavoritesDao
+
     abstract fun historyDao(): HistoryDao
 }

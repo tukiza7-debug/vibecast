@@ -5,8 +5,8 @@ package io.github.tukiza7_debug.vibecast.adblock.web
  * the page removed it, so hiding survives DOM changes without a native callback.
  */
 object CosmeticJs {
-
-    fun applyCss(escapedCss: String): String = """
+    fun applyCss(escapedCss: String): String =
+        """
         (function() {
           var css = `$escapedCss`;
           var style = document.getElementById('vc-adblock-style');
@@ -19,9 +19,10 @@ object CosmeticJs {
             style.textContent = css;
           }
         })();
-    """.trimIndent()
+        """.trimIndent()
 
-    fun removeHidden(selectorRegex: String): String = """
+    fun removeHidden(selectorRegex: String): String =
+        """
         (function() {
           var pattern = new RegExp('^(' + "$selectorRegex" + ')$');
           var style = document.getElementById('vc-adblock-style');
@@ -30,9 +31,10 @@ object CosmeticJs {
           var kept = parts.filter(function(s) { return !pattern.test(s); });
           if (kept.length === 0) { style.remove(); } else { style.textContent = kept.join(',') + '{display:none!important;visibility:hidden!important}'; }
         })();
-    """.trimIndent()
+        """.trimIndent()
 
-    fun mutationObserver(): String = """
+    fun mutationObserver(): String =
+        """
         (function() {
           if (window.__vcCosmeticObserver) return;
           window.__vcCosmeticObserver = new MutationObserver(function() {
@@ -44,5 +46,5 @@ object CosmeticJs {
           });
           window.__vcCosmeticObserver.observe(document.documentElement, { childList: true, subtree: true });
         })();
-    """.trimIndent()
+        """.trimIndent()
 }

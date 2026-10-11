@@ -9,8 +9,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SchemaValidatorTest {
-
-    private fun base(): String = MockWebServer().let { it.start(); val url = it.url("/").toString(); it.shutdown(); url }
+    private fun base(): String =
+        MockWebServer().let {
+            it.start()
+            val url = it.url("/").toString()
+            it.shutdown()
+            url
+        }
 
     @Test
     fun `accepts a valid json extension`() {
@@ -69,18 +74,20 @@ class SchemaValidatorTest {
 
     @Test
     fun `video strategy requirements are enforced`() {
-        val text = TestExtensions.jsonSource(base())
-            .replace("\"strategy\": \"direct\"", "\"strategy\": \"regex\"")
+        val text =
+            TestExtensions.jsonSource(base())
+                .replace("\"strategy\": \"direct\"", "\"strategy\": \"regex\"")
         val issues = SchemaValidator.validate(text)
         assertTrue(issues.any { it == "video.pattern: required for the 'regex' strategy" })
     }
 
     @Test
     fun `invalid regex is reported with the field`() {
-        val text = TestExtensions.jsonSource(base()).replace(
-            "\"strategy\": \"direct\"",
-            "\"strategy\": \"regex\", \"pattern\": \"file([bad\"",
-        )
+        val text =
+            TestExtensions.jsonSource(base()).replace(
+                "\"strategy\": \"direct\"",
+                "\"strategy\": \"regex\", \"pattern\": \"file([bad\"",
+            )
         val issues = SchemaValidator.validate(text)
         assertTrue(issues.any { it.startsWith("video.pattern: invalid regex") })
     }

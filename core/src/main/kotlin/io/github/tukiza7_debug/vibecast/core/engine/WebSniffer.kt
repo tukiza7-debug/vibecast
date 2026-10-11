@@ -1,11 +1,12 @@
 package io.github.tukiza7_debug.vibecast.core.engine
 
-import io.github.tukiza7_debug.vibecast.core.http.HostFilter
-import io.github.tukiza7_debug.vibecast.core.model.SubtitleTrack
-
 /** WebView-backed sniffer port; implemented by the Android layer with ad blocking on. */
 interface WebSniffer {
-    fun sniff(pageUrl: String, headers: Map<String, String>, timeoutMs: Long): SniffOutcome
+    fun sniff(
+        pageUrl: String,
+        headers: Map<String, String>,
+        timeoutMs: Long,
+    ): SniffOutcome
 }
 
 sealed class SniffOutcome {

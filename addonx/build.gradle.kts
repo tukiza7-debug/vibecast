@@ -12,9 +12,10 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
-val brand = Properties().apply {
-    rootProject.file("brand.properties").inputStream().use { load(it) }
-}
+val brand =
+    Properties().apply {
+        rootProject.file("brand.properties").inputStream().use { load(it) }
+    }
 
 android {
     namespace = "io.github.tukiza7_debug.vibecast.addonx"

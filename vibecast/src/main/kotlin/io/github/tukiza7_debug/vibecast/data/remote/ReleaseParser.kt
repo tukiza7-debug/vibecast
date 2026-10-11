@@ -10,7 +10,6 @@ import kotlinx.serialization.json.JsonPrimitive
  * install. Kept free of framework dependencies so it is unit testable on the JVM.
  */
 object ReleaseParser {
-
     data class ParsedRelease(
         val versionName: String,
         val notes: String,
@@ -19,7 +18,11 @@ object ReleaseParser {
         val checksumsUrl: String?,
     )
 
-    fun parse(json: String, deviceAbi: String, appPrefix: String = "VibeCast"): ParsedRelease? {
+    fun parse(
+        json: String,
+        deviceAbi: String,
+        appPrefix: String = "VibeCast",
+    ): ParsedRelease? {
         val element = runCatching { Json.parseToJsonElement(json) as? JsonObject }.getOrNull() ?: return null
         val tagName = element.string("tag_name") ?: return null
         if (tagName.startsWith("site-")) return null
@@ -56,11 +59,9 @@ object ReleaseParser {
 
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.content
 
-    private fun JsonObject.bool(key: String): Boolean? =
-        (this[key] as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
+    private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
 
-    private fun JsonObject.array(key: String): List<kotlinx.serialization.json.JsonElement>? =
-        (this[key] as? JsonArray)?.toList()
+    private fun JsonObject.array(key: String): List<kotlinx.serialization.json.JsonElement>? = (this[key] as? JsonArray)?.toList()
 
     val APK_NAME_REGEX = Regex("-(universal|arm64-v8a|armeabi-v7a|x86_64|x86)\\.apk$")
 }

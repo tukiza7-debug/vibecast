@@ -9,7 +9,10 @@ import android.webkit.WebView
  * without a user gesture. Pair it with AdBlockWebViewClient on every WebView.
  */
 open class AdBlockWebChromeClient : WebChromeClient() {
-
-    override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean =
-        PopupGuard.onCreateWindow(isUserGesture) == PopupGuard.Action.BLOCK
+    override fun onCreateWindow(
+        view: WebView,
+        isDialog: Boolean,
+        isUserGesture: Boolean,
+        resultMsg: Message?,
+    ): Boolean = PopupGuard.onCreateWindow(isUserGesture) == PopupGuard.Action.BLOCK
 }

@@ -8,7 +8,6 @@ import org.jsoup.nodes.Element
  * counts supplied by the page itself.
  */
 object CssSelectorBuilder {
-
     data class NodeInfo(
         val tag: String,
         val id: String?,
@@ -16,7 +15,10 @@ object CssSelectorBuilder {
         val nthOfType: Int,
     )
 
-    fun build(path: List<NodeInfo>, siblingCount: Int): String {
+    fun build(
+        path: List<NodeInfo>,
+        siblingCount: Int,
+    ): String {
         if (path.isEmpty()) return ""
         val target = path.last()
         if (!target.id.isNullOrBlank()) return "#${target.id}"
@@ -35,9 +37,10 @@ object CssSelectorBuilder {
         return segments.joinToString(" > ")
     }
 
-    fun cssEscape(identifier: String): String =
-        identifier.split(Regex("(?=[^A-Za-z0-9_-])")).joinToString("\\\\") { it }
+    fun cssEscape(identifier: String): String = identifier.split(Regex("(?=[^A-Za-z0-9_-])")).joinToString("\\\\") { it }
 
-    fun elementSignature(element: Element): String =
-        element.tagName() + "#" + element.classNames().sorted().joinToString(".")
+    fun elementSignature(element: Element): String {
+        val classes = element.classNames().sorted()
+        return if (classes.isEmpty()) element.tagName() else element.tagName() + "." + classes.joinToString(".")
+    }
 }

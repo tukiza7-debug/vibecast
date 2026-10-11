@@ -2,13 +2,11 @@ package io.github.tukiza7_debug.vibecast.adblock.rules
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FilterParserTest {
-
     @Test
     fun `parses host anchored rules with separator`() {
         val parsed = FilterParser.parse("||ads.example.com^\n||tracker.net/script.js")
@@ -51,14 +49,15 @@ class FilterParserTest {
 
     @Test
     fun `parses cosmetic rules`() {
-        val parsed = FilterParser.parse(
-            """
-            ##.ad-banner
-            example.com##.promo
-            foo.com,bar.com##.modal
-            #@#.keep-me
-            """.trimIndent(),
-        )
+        val parsed =
+            FilterParser.parse(
+                """
+                ##.ad-banner
+                example.com##.promo
+                foo.com,bar.com##.modal
+                #@#.keep-me
+                """.trimIndent(),
+            )
         assertEquals(listOf(".ad-banner"), parsed.cosmeticGlobal)
         assertEquals(listOf(".promo"), parsed.cosmeticByDomain["example.com"])
         assertEquals(listOf(".modal"), parsed.cosmeticByDomain["foo.com"])
@@ -68,14 +67,15 @@ class FilterParserTest {
 
     @Test
     fun `skips comments and unsupported pseudo classes`() {
-        val parsed = FilterParser.parse(
-            """
-            ! comment
-            [Adblock Plus 2.0]
-            ##.ad:has(.child)
-            ##.plain-ad
-            """.trimIndent(),
-        )
+        val parsed =
+            FilterParser.parse(
+                """
+                ! comment
+                [Adblock Plus 2.0]
+                ##.ad:has(.child)
+                ##.plain-ad
+                """.trimIndent(),
+            )
         assertEquals(listOf(".plain-ad"), parsed.cosmeticGlobal)
         assertTrue(parsed.network.isEmpty())
     }
@@ -96,14 +96,16 @@ class FilterParserTest {
 
     @Test
     fun `parses a real easylist snapshot`() {
-        val text = javaClass.classLoader!!.getResourceAsStream("easylist-head.txt")!!
-            .bufferedReader().readText()
+        val text =
+            javaClass.classLoader!!.getResourceAsStream("easylist-head.txt")!!
+                .bufferedReader().readText()
         val parsed = FilterParser.parse(text)
         assertTrue(parsed.network.size > 30)
         val matcher = UrlMatcher(parsed.network)
-        val decision = matcher.decide(
-            BlockRequest("https://pagead2.googlesyndication.com/x", "example.org", ResourceType.SCRIPT),
-        )
+        val decision =
+            matcher.decide(
+                BlockRequest("https://pagead2.googlesyndication.com/x", "example.org", ResourceType.SCRIPT),
+            )
         assertTrue(decision is Decision.Block || decision is Decision.Allow)
     }
 }

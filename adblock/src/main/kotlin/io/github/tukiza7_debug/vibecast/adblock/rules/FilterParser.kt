@@ -8,7 +8,6 @@ package io.github.tukiza7_debug.vibecast.adblock.rules
  * "@@" exceptions, "##selector" and "domain##selector" element hiding, "#@#" exceptions.
  */
 object FilterParser {
-
     data class ParsedRules(
         val network: List<NetworkRule>,
         val cosmeticGlobal: List<String>,
@@ -16,18 +15,19 @@ object FilterParser {
         val cosmeticExceptions: Set<String>,
     )
 
-    private val supportedTypes = mapOf(
-        "script" to ResourceType.SCRIPT,
-        "image" to ResourceType.IMAGE,
-        "stylesheet" to ResourceType.STYLESHEET,
-        "subdocument" to ResourceType.SUBDOCUMENT,
-        "xmlhttprequest" to ResourceType.XMLHTTPREQUEST,
-        "media" to ResourceType.MEDIA,
-        "popup" to ResourceType.POPUP,
-        "font" to ResourceType.FONT,
-        "object" to ResourceType.OBJECT,
-        "other" to ResourceType.OTHER,
-    )
+    private val supportedTypes =
+        mapOf(
+            "script" to ResourceType.SCRIPT,
+            "image" to ResourceType.IMAGE,
+            "stylesheet" to ResourceType.STYLESHEET,
+            "subdocument" to ResourceType.SUBDOCUMENT,
+            "xmlhttprequest" to ResourceType.XMLHTTPREQUEST,
+            "media" to ResourceType.MEDIA,
+            "popup" to ResourceType.POPUP,
+            "font" to ResourceType.FONT,
+            "object" to ResourceType.OBJECT,
+            "other" to ResourceType.OTHER,
+        )
 
     fun parse(text: String): ParsedRules {
         val network = ArrayList<NetworkRule>(4096)
@@ -38,12 +38,13 @@ object FilterParser {
             val line = rawLine.trim()
             when {
                 line.isEmpty() || line.startsWith("!") || line.startsWith("[") -> return@forEach
-                line.contains("##") || line.contains("#@#") -> parseCosmetic(
-                    line,
-                    cosmeticGlobal,
-                    cosmeticByDomain,
-                    cosmeticExceptions,
-                )
+                line.contains("##") || line.contains("#@#") ->
+                    parseCosmetic(
+                        line,
+                        cosmeticGlobal,
+                        cosmeticByDomain,
+                        cosmeticExceptions,
+                    )
                 else -> parseNetwork(line)?.let(network::add)
             }
         }
@@ -101,6 +102,14 @@ object FilterParser {
             }
         }
         if (patternPart.isEmpty()) return null
+        val ruleOptions =
+            RuleOptions(
+                types = types,
+                thirdPartyOnly = thirdPartyOnly,
+                firstPartyOnly = firstPartyOnly,
+                includedDomains = includedDomains,
+                excludedDomains = excludedDomains,
+            )
         var isStartAnchor = false
         var isEndAnchor = false
         if (patternPart.startsWith("||")) {
@@ -115,11 +124,7 @@ object FilterParser {
                 isEndAnchor = patternPart.endsWith("|"),
                 hostPart = host,
                 rest = patternPart.substring(2 + host.length),
-                types = types,
-                thirdPartyOnly = thirdPartyOnly,
-                firstPartyOnly = firstPartyOnly,
-                includedDomains = includedDomains,
-                excludedDomains = excludedDomains,
+                options = ruleOptions,
             )
         }
         if (patternPart.startsWith("|")) {
@@ -140,11 +145,7 @@ object FilterParser {
             isEndAnchor = isEndAnchor,
             hostPart = "",
             rest = patternPart,
-            types = types,
-            thirdPartyOnly = thirdPartyOnly,
-            firstPartyOnly = firstPartyOnly,
-            includedDomains = includedDomains,
-            excludedDomains = excludedDomains,
+            options = ruleOptions,
         )
     }
 
@@ -157,11 +158,7 @@ object FilterParser {
         isEndAnchor: Boolean,
         hostPart: String,
         rest: String,
-        types: Set<ResourceType>?,
-        thirdPartyOnly: Boolean,
-        firstPartyOnly: Boolean,
-        includedDomains: List<String>,
-        excludedDomains: List<String>,
+        options: RuleOptions,
     ): NetworkRule? {
         val segments = compileSegments(rest) ?: return null
         return NetworkRule(
@@ -173,11 +170,7 @@ object FilterParser {
             isEndAnchor = isEndAnchor,
             hostPart = hostPart,
             segments = segments,
-            types = types,
-            thirdPartyOnly = thirdPartyOnly,
-            firstPartyOnly = firstPartyOnly,
-            includedDomains = includedDomains,
-            excludedDomains = excludedDomains,
+            options = options,
         )
     }
 
@@ -256,13 +249,14 @@ object FilterParser {
         }
     }
 
-    private val UNSUPPORTED_PSEUDO = listOf(
-        ":has(",
-        ":has-text(",
-        ":matches(",
-        ":matches-attr(",
-        ":nth-ancestor(",
-        ":upward(",
-        ":remove(",
-    )
+    private val UNSUPPORTED_PSEUDO =
+        listOf(
+            ":has(",
+            ":has-text(",
+            ":matches(",
+            ":matches-attr(",
+            ":nth-ancestor(",
+            ":upward(",
+            ":remove(",
+        )
 }

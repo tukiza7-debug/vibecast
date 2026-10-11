@@ -47,7 +47,6 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
     @Inject lateinit var importPromptBus: ImportPromptBus
 
     @Inject lateinit var clipboardCodeWatcher: ClipboardCodeWatcher
@@ -57,13 +56,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         importController = ImportPromptController(importPromptBus)
-        lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onResume(owner: LifecycleOwner) {
-                clipboardCodeWatcher.detectForegroundCode()?.let { code ->
-                    importController.offer(code, origin = "clipboard")
+        lifecycle.addObserver(
+            object : DefaultLifecycleObserver {
+                override fun onResume(owner: LifecycleOwner) {
+                    clipboardCodeWatcher.detectForegroundCode()?.let { code ->
+                        importController.offer(code, origin = "clipboard")
+                    }
                 }
-            }
-        })
+            },
+        )
         handleIntent(intent)
         setContent {
             val settingsViewModel: io.github.tukiza7_debug.vibecast.ui.settings.SettingsViewModel = hiltViewModel()
@@ -169,17 +170,21 @@ fun AppScaffold(importController: ImportPromptController) {
 }
 
 @Composable
-private fun ExtensionsUndoHost(snackbarHostState: SnackbarHostState, navController: NavHostController) {
+private fun ExtensionsUndoHost(
+    snackbarHostState: SnackbarHostState,
+    navController: NavHostController,
+) {
     val vm: io.github.tukiza7_debug.vibecast.ui.extensions.ExtensionsViewModel = hiltViewModel()
     val bus = vm.importBus
     androidx.compose.runtime.LaunchedEffect(bus) {
         bus.additions.collect { added ->
             if (added.undoable) {
-                val result = snackbarHostState.showSnackbar(
-                    message = "${added.name} v${added.version} added to VibeCast",
-                    actionLabel = "Undo",
-                    withDismissAction = true,
-                )
+                val result =
+                    snackbarHostState.showSnackbar(
+                        message = "${added.name} v${added.version} added to VibeCast",
+                        actionLabel = "Undo",
+                        withDismissAction = true,
+                    )
                 if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
                     vm.undoAdd(added.extensionId)
                 }
@@ -188,9 +193,10 @@ private fun ExtensionsUndoHost(snackbarHostState: SnackbarHostState, navControll
     }
 }
 
-private fun bottomIcon(route: String) = when (route) {
-    Routes.HOME -> Icons.Filled.Home
-    Routes.SEARCH -> Icons.Filled.Explore
-    Routes.LIBRARY -> Icons.Filled.Favorite
-    else -> Icons.Filled.Extension
-}
+private fun bottomIcon(route: String) =
+    when (route) {
+        Routes.HOME -> Icons.Filled.Home
+        Routes.SEARCH -> Icons.Filled.Explore
+        Routes.LIBRARY -> Icons.Filled.Favorite
+        else -> Icons.Filled.Extension
+    }

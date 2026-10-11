@@ -13,22 +13,26 @@ import kotlinx.serialization.json.JsonPrimitive
  * resolved against (an item or a response object).
  */
 object MiniJsonPath {
+    val lenient =
+        Json {
+            ignoreUnknownKeys = true
+            explicitNulls = false
+            encodeDefaults = false
+            isLenient = true
+        }
 
-    val lenient = Json {
-        ignoreUnknownKeys = true
-        explicitNulls = false
-        encodeDefaults = false
-        isLenient = true
-    }
-
-    fun resolve(root: JsonElement, path: String): JsonElement? {
+    fun resolve(
+        root: JsonElement,
+        path: String,
+    ): JsonElement? {
         val normalized = path.trim()
         if (normalized == "$") return root
-        val rest = when {
-            normalized.startsWith("$.") -> normalized.substring(2)
-            normalized.startsWith("$[") -> normalized.substring(1)
-            else -> return null
-        }
+        val rest =
+            when {
+                normalized.startsWith("$.") -> normalized.substring(2)
+                normalized.startsWith("$[") -> normalized.substring(1)
+                else -> return null
+            }
         val segments = splitSegments(rest, normalized)
         var current: JsonElement = root
         for (segment in segments) {
@@ -37,16 +41,20 @@ object MiniJsonPath {
         return current
     }
 
-    fun asString(element: JsonElement?): String? = when (element) {
-        null, is JsonNull -> null
-        is JsonPrimitive -> element.content
-        is JsonArray -> if (element.isEmpty()) null else element.firstNotNullOfOrNull { asString(it) }
-        is JsonObject -> null
-    }
+    fun asString(element: JsonElement?): String? =
+        when (element) {
+            null, is JsonNull -> null
+            is JsonPrimitive -> element.content
+            is JsonArray -> if (element.isEmpty()) null else element.firstNotNullOfOrNull { asString(it) }
+            is JsonObject -> null
+        }
 
     fun asArrayOrNull(element: JsonElement?): JsonArray? = element as? JsonArray
 
-    private fun splitSegments(rest: String, fullPath: String): List<String> {
+    private fun splitSegments(
+        rest: String,
+        fullPath: String,
+    ): List<String> {
         val segments = mutableListOf<String>()
         val buffer = StringBuilder()
         var index = 0
@@ -78,7 +86,10 @@ object MiniJsonPath {
         return segments
     }
 
-    private fun resolveSegment(current: JsonElement, segment: String): JsonElement? {
+    private fun resolveSegment(
+        current: JsonElement,
+        segment: String,
+    ): JsonElement? {
         if (segment == "[*]") return current as? JsonArray
         if (segment.startsWith("[") && segment.endsWith("]")) {
             val index = segment.substring(1, segment.length - 1).toIntOrNull() ?: return null

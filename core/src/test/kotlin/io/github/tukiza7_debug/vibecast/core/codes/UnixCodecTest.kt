@@ -6,7 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UnixCodecTest {
-
     private val json = """{"schemaVersion":1,"id":"test.sample","name":"Sample","version":1}"""
 
     @Test
@@ -64,9 +63,10 @@ class UnixCodecTest {
         val payload = code.removePrefix("unix1:").substringBeforeLast('.')
         val crc = code.substringAfterLast('.')
         val padded = payload + "=".repeat((4 - payload.length % 4) % 4)
-        val crcOfPadded = "%08x".format(
-            java.util.zip.CRC32().apply { update(padded.toByteArray(Charsets.US_ASCII)) }.value,
-        )
+        val crcOfPadded =
+            "%08x".format(
+                java.util.zip.CRC32().apply { update(padded.toByteArray(Charsets.US_ASCII)) }.value,
+            )
         assertEquals(json, UnixCodec.decode("unix1:$padded.$crcOfPadded"))
         assertEquals(json, UnixCodec.decode("unix1:$payload.$crc"))
     }

@@ -1,12 +1,11 @@
 package io.github.tukiza7_debug.vibecast.adblock.rules
 
-import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class UrlMatcherTest {
-
     private fun matcher(vararg rules: String): UrlMatcher = UrlMatcher(FilterParser.parse(rules.joinToString("\n")).network)
 
     private fun req(
@@ -94,23 +93,25 @@ class UrlMatcherTest {
 
     @Test
     fun `real easylist snapshot blocks typical ad hosts`() {
-        val fullList = File(System.getProperty("user.dir") ?: ".")
-            .let { dir ->
-                var d = dir
-                repeat(4) {
-                    val candidate = File(d, "adblock/src/main/assets/filters/easylist.txt")
-                    if (candidate.exists()) return@let candidate.readText()
-                    d = d.parentFile ?: d
+        val fullList =
+            File(System.getProperty("user.dir") ?: ".")
+                .let { dir ->
+                    var d = dir
+                    repeat(4) {
+                        val candidate = File(d, "adblock/src/main/assets/filters/easylist.txt")
+                        if (candidate.exists()) return@let candidate.readText()
+                        d = d.parentFile ?: d
+                    }
+                    javaClass.classLoader!!.getResourceAsStream("easylist-head.txt")!!
+                        .bufferedReader().readText()
                 }
-                javaClass.classLoader!!.getResourceAsStream("easylist-head.txt")!!
-                    .bufferedReader().readText()
-            }
         val parsed = FilterParser.parse(fullList)
         val m = UrlMatcher(parsed.network)
-        val samples = listOf(
-            "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
-            "https://ad.doubleclick.net/ddm/adj/N123",
-        )
+        val samples =
+            listOf(
+                "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+                "https://ad.doubleclick.net/ddm/adj/N123",
+            )
         val blocked = samples.count { m.decide(BlockRequest(it, "example.org", ResourceType.SCRIPT)) is Decision.Block }
         assertTrue("expected at least one real rule hit, got $blocked", blocked >= 1)
     }

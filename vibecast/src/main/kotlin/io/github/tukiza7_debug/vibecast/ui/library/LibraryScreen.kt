@@ -1,6 +1,5 @@
 package io.github.tukiza7_debug.vibecast.ui.library
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,48 +37,64 @@ import io.github.tukiza7_debug.vibecast.data.repo.FeedRepository
 import io.github.tukiza7_debug.vibecast.data.repo.HistoryRepository
 import io.github.tukiza7_debug.vibecast.ui.common.EmptyState
 import io.github.tukiza7_debug.vibecast.ui.nav.detailRouteFor
-import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltViewModel
-class LibraryViewModel @Inject constructor(
-    historyRepository: HistoryRepository,
-    private val extensionRepository: ExtensionRepository,
-    private val feedRepository: FeedRepository,
-) : ViewModel() {
+class LibraryViewModel
+    @Inject
+    constructor(
+        historyRepository: HistoryRepository,
+        private val extensionRepository: ExtensionRepository,
+        private val feedRepository: FeedRepository,
+    ) : ViewModel() {
+        val favorites =
+            historyRepository.observeFavorites()
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val favorites = historyRepository.observeFavorites()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        val history =
+            historyRepository.observeHistory()
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val history = historyRepository.observeHistory()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        fun routeFor(
+            entity: FavoriteEntity,
+            onReady: (String?) -> Unit,
+        ) {
+            viewModelScope.launch {
+                onReady(route(entity.extensionId, entity.url, entity.title, entity.cover))
+            }
+        }
 
-    fun routeFor(entity: FavoriteEntity, onReady: (String?) -> Unit) {
-        viewModelScope.launch {
-            onReady(route(entity.extensionId, entity.url, entity.title, entity.cover))
+        fun routeFor(
+            entity: HistoryEntity,
+            onReady: (String?) -> Unit,
+        ) {
+            viewModelScope.launch {
+                onReady(route(entity.extensionId, entity.url, entity.title, entity.cover))
+            }
+        }
+
+        private suspend fun route(
+            extensionId: String,
+            url: String,
+            title: String,
+            cover: String?,
+        ): String? {
+            val e = extensionRepository.get(extensionId) ?: return null
+            val parsed = runCatching { feedRepository.load(e) }.getOrNull() ?: return null
+            // URL is the canonical item key; detail needs the item page, not an episode url.
+            val itemUrl = if (parsed.episodes.request.url.contains("{url}")) url else url
+            return detailRouteFor(extensionId, io.github.tukiza7_debug.vibecast.core.model.SearchItem(title, itemUrl, cover))
         }
     }
-
-    fun routeFor(entity: HistoryEntity, onReady: (String?) -> Unit) {
-        viewModelScope.launch {
-            onReady(route(entity.extensionId, entity.url, entity.title, entity.cover))
-        }
-    }
-
-    private suspend fun route(extensionId: String, url: String, title: String, cover: String?): String? {
-        val e = extensionRepository.get(extensionId) ?: return null
-        val parsed = runCatching { feedRepository.load(e) }.getOrNull() ?: return null
-        // URL is the canonical item key; detail needs the item page, not an episode url.
-        val itemUrl = if (parsed.episodes.request.url.contains("{url}")) url else url
-        return detailRouteFor(extensionId, io.github.tukiza7_debug.vibecast.core.model.SearchItem(title, itemUrl, cover))
-    }
-}
 
 @Composable
-fun LibraryScreen(onOpenDetail: (String) -> Unit, viewModel: LibraryViewModel = hiltViewModel()) {
+fun LibraryScreen(
+    onOpenDetail: (String) -> Unit,
+    viewModel: LibraryViewModel = hiltViewModel(),
+) {
     var tab by remember { mutableIntStateOf(0) }
     val favorites by viewModel.favorites.collectAsState()
     val history by viewModel.history.collectAsState()
@@ -95,45 +110,53 @@ fun LibraryScreen(onOpenDetail: (String) -> Unit, viewModel: LibraryViewModel = 
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("History") })
         }
         when (tab) {
-            0 -> if (favorites.isEmpty()) {
-                EmptyState("Nothing saved yet")
-            } else {
-                LazyColumn {
-                    items(favorites, key = { it.itemKey }) { favorite ->
-                        LibraryCard(
-                            title = favorite.title,
-                            cover = favorite.cover,
-                            subtitle = favorite.extensionId,
-                            onClick = { viewModel.routeFor(favorite) { route -> route?.let(onOpenDetail) } },
-                        )
+            0 ->
+                if (favorites.isEmpty()) {
+                    EmptyState("Nothing saved yet")
+                } else {
+                    LazyColumn {
+                        items(favorites, key = { it.itemKey }) { favorite ->
+                            LibraryCard(
+                                title = favorite.title,
+                                cover = favorite.cover,
+                                subtitle = favorite.extensionId,
+                                onClick = { viewModel.routeFor(favorite) { route -> route?.let(onOpenDetail) } },
+                            )
+                        }
                     }
                 }
-            }
-            else -> if (history.isEmpty()) {
-                EmptyState("Watch something first")
-            } else {
-                LazyColumn {
-                    items(history, key = { it.itemKey }) { entry ->
-                        LibraryCard(
-                            title = entry.title,
-                            cover = entry.cover,
-                            subtitle = "Watched at ${entry.positionMs / 60000} min",
-                            onClick = { viewModel.routeFor(entry) { route -> route?.let(onOpenDetail) } },
-                        )
+            else ->
+                if (history.isEmpty()) {
+                    EmptyState("Watch something first")
+                } else {
+                    LazyColumn {
+                        items(history, key = { it.itemKey }) { entry ->
+                            LibraryCard(
+                                title = entry.title,
+                                cover = entry.cover,
+                                subtitle = "Watched at ${entry.positionMs / 60000} min",
+                                onClick = { viewModel.routeFor(entry) { route -> route?.let(onOpenDetail) } },
+                            )
+                        }
                     }
                 }
-            }
         }
     }
 }
 
 @Composable
-private fun LibraryCard(title: String, cover: String?, subtitle: String, onClick: () -> Unit) {
+private fun LibraryCard(
+    title: String,
+    cover: String?,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
     Card(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
         shape = MaterialTheme.shapes.medium,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -141,9 +164,10 @@ private fun LibraryCard(title: String, cover: String?, subtitle: String, onClick
                 model = cover,
                 contentDescription = title,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(10.dp)),
+                modifier =
+                    Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(10.dp)),
             )
             Column(Modifier.padding(12.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)

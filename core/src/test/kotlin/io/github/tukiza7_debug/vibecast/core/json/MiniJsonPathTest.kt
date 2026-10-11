@@ -7,16 +7,16 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class MiniJsonPathTest {
-
-    private val root = Json.parseToJsonElement(
-        """
-        {
-          "a": { "b": [ { "name": "one" }, { "name": "two" } ], "title": "deep" },
-          "list": [10, 20, 30],
-          "n": null
-        }
-        """.trimIndent(),
-    )
+    private val root =
+        Json.parseToJsonElement(
+            """
+            {
+              "a": { "b": [ { "name": "one" }, { "name": "two" } ], "title": "deep" },
+              "list": [10, 20, 30],
+              "n": null
+            }
+            """.trimIndent(),
+        )
 
     @Test
     fun `resolves nested objects`() {

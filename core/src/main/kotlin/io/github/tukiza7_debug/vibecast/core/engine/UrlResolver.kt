@@ -5,8 +5,11 @@ import java.net.URLEncoder
 
 /** Resolves step request URL templates ({query}, {page}, {url}) and relative URLs. */
 object UrlResolver {
-
-    fun resolveTemplate(template: String, baseUrl: String, vars: Map<String, String>): String {
+    fun resolveTemplate(
+        template: String,
+        baseUrl: String,
+        vars: Map<String, String>,
+    ): String {
         var url = template
         vars.forEach { (name, value) ->
             val token = "{$name}"
@@ -18,7 +21,10 @@ object UrlResolver {
         return absolutize(url, baseUrl)
     }
 
-    fun absolutize(url: String, baseUrl: String): String {
+    fun absolutize(
+        url: String,
+        baseUrl: String,
+    ): String {
         if (url.startsWith("http://") || url.startsWith("https://")) return url
         return runCatching { URI(baseUrl).resolve(url).toString() }.getOrDefault(url)
     }

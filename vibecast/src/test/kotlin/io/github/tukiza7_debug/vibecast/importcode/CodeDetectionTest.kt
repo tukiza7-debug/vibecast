@@ -6,7 +6,6 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CodeDetectionTest {
-
     @Test
     fun `unix codes are found in shared text and clipboard payloads`() {
         assertEquals("unix1:abc.12345678", CodeDetector.findInText("copy this unix1:abc.12345678 now"))

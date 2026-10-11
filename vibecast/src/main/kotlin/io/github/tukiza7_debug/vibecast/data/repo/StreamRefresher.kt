@@ -11,21 +11,22 @@ import javax.inject.Singleton
  * can resume at the same position on a fresh stream.
  */
 @Singleton
-class StreamRefresher @Inject constructor(
-    private val extensionDao: ExtensionDao,
-    private val feedRepository: FeedRepository,
-    private val metaRegistry: PlaybackMetaRegistry,
-) : io.github.tukiza7_debug.vibecast.player.StreamRefresher {
+class StreamRefresher
+    @Inject
+    constructor(
+        private val extensionDao: ExtensionDao,
+        private val feedRepository: FeedRepository,
+        private val metaRegistry: PlaybackMetaRegistry,
+    ) : io.github.tukiza7_debug.vibecast.player.StreamRefresher {
+        override suspend fun refresh(mediaId: String): Boolean {
+            val refreshed = resolve(mediaId) ?: return false
+            return true
+        }
 
-    override suspend fun refresh(mediaId: String): Boolean {
-        val refreshed = resolve(mediaId) ?: return false
-        return true
+        suspend fun resolve(mediaId: String): StreamRef? {
+            val meta = metaRegistry.get(mediaId) ?: return null
+            val entity = extensionDao.byId(meta.extensionId) ?: return null
+            val extension = runCatching { feedRepository.load(entity) }.getOrNull() ?: return null
+            return runCatching { feedRepository.stream(extension, mediaId) }.getOrNull()
+        }
     }
-
-    suspend fun resolve(mediaId: String): StreamRef? {
-        val meta = metaRegistry.get(mediaId) ?: return null
-        val entity = extensionDao.byId(meta.extensionId) ?: return null
-        val extension = runCatching { feedRepository.load(entity) }.getOrNull() ?: return null
-        return runCatching { feedRepository.stream(extension, mediaId) }.getOrNull()
-    }
-}

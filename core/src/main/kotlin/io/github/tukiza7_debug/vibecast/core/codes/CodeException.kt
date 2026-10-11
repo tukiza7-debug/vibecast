@@ -1,6 +1,6 @@
 package io.github.tukiza7_debug.vibecast.core.codes
 
-class CodeException(reason: String) : Exception(reason)
+class CodeException(reason: String, cause: Throwable? = null) : Exception(reason, cause)
 
-class ExtensionValidationException(val issues: List<String>) :
-    Exception("extension rejected: " + issues.joinToString("; "))
+class ExtensionValidationException(val issues: List<String>, cause: Throwable? = null) :
+    Exception("extension rejected: " + issues.joinToString("; "), cause)

@@ -18,22 +18,26 @@ import kotlinx.coroutines.runBlocking
  * carry "extension_json"; the insert validates before anything is stored.
  */
 class ExtensionImportProvider : ContentProvider() {
-
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface ProviderEntryPoint {
         fun extensionRepository(): ExtensionRepository
+
         fun importPromptBus(): ImportPromptBus
     }
 
-    private fun entryPoint(): ProviderEntryPoint = EntryPointAccessors.fromApplication(
-        context!!.applicationContext,
-        ProviderEntryPoint::class.java,
-    )
+    private fun entryPoint(): ProviderEntryPoint =
+        EntryPointAccessors.fromApplication(
+            context!!.applicationContext,
+            ProviderEntryPoint::class.java,
+        )
 
     override fun onCreate(): Boolean = true
 
-    override fun insert(uri: Uri, values: ContentValues?): Uri? {
+    override fun insert(
+        uri: Uri,
+        values: ContentValues?,
+    ): Uri? {
         val json = values?.getAsString("extension_json") ?: return null
         val repository = entryPoint().extensionRepository()
         val bus = entryPoint().importPromptBus()
@@ -48,11 +52,26 @@ class ExtensionImportProvider : ContentProvider() {
         }
     }
 
-    override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
+    override fun query(
+        uri: Uri,
+        projection: Array<out String>?,
+        selection: String?,
+        selectionArgs: Array<out String>?,
+        sortOrder: String?,
+    ): Cursor? = null
 
     override fun getType(uri: Uri): String? = null
 
-    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
+    override fun delete(
+        uri: Uri,
+        selection: String?,
+        selectionArgs: Array<out String>?,
+    ): Int = 0
 
-    override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
+    override fun update(
+        uri: Uri,
+        values: ContentValues?,
+        selection: String?,
+        selectionArgs: Array<out String>?,
+    ): Int = 0
 }

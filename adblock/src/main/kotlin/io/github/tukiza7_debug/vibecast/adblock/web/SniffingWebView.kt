@@ -26,21 +26,27 @@ class SniffingWebView(
     private val engine: FilterEngine,
     private val policy: () -> SitePolicy,
 ) : WebSniffer {
-
-    override fun sniff(pageUrl: String, headers: Map<String, String>, timeoutMs: Long): SniffOutcome {
+    override fun sniff(
+        pageUrl: String,
+        headers: Map<String, String>,
+        timeoutMs: Long,
+    ): SniffOutcome {
         val latch = CountDownLatch(1)
         val capture = AtomicReference<Capture?>(null)
         val failure = AtomicReference<String?>(null)
         Handler(Looper.getMainLooper()).post {
             runCatching { attachAndLoad(pageUrl, headers, latch, capture, failure) }
-                .onFailure { failure.set(it.message ?: "failed to attach WebView"); latch.countDown() }
+                .onFailure {
+                    failure.set(it.message ?: "failed to attach WebView")
+                    latch.countDown()
+                }
         }
         val finished = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
         Handler(Looper.getMainLooper()).post { cleanup() }
         val result = capture.get()
         return when {
             result != null -> SniffOutcome.Found(result.url, result.mimeType, result.requestHeaders)
-            !finished -> SniffOutcome.Failed("no media request captured within ${timeoutMs} ms")
+            !finished -> SniffOutcome.Failed("no media request captured within $timeoutMs ms")
             else -> SniffOutcome.Failed(failure.get() ?: "no media request captured on $pageUrl")
         }
     }
@@ -59,23 +65,27 @@ class SniffingWebView(
         webView.settings.mediaPlaybackRequiresUserGesture = false
         webView.settings.blockNetworkImage = true
         headers["User-Agent"]?.let { webView.settings.userAgentString = it }
-        webView.webViewClient = object : AdBlockWebViewClient(engine, policy) {
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                val response = super.shouldInterceptRequest(view, request)
-                val url = request.url.toString()
-                if (capture.get() == null && SniffRequestJudge.isMediaUrl(url)) {
-                    capture.set(
-                        Capture(
-                            url = url,
-                            mimeType = SniffRequestJudge.mimeTypeFromUrl(url),
-                            requestHeaders = request.requestHeaders?.filterValues { it != null } ?: emptyMap(),
-                        ),
-                    )
-                    latch.countDown()
+        webView.webViewClient =
+            object : AdBlockWebViewClient(engine, policy) {
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: WebResourceRequest,
+                ): WebResourceResponse? {
+                    val response = super.shouldInterceptRequest(view, request)
+                    val url = request.url.toString()
+                    if (capture.get() == null && SniffRequestJudge.isMediaUrl(url)) {
+                        capture.set(
+                            Capture(
+                                url = url,
+                                mimeType = SniffRequestJudge.mimeTypeFromUrl(url),
+                                requestHeaders = request.requestHeaders?.filterValues { it != null } ?: emptyMap(),
+                            ),
+                        )
+                        latch.countDown()
+                    }
+                    return response
                 }
-                return response
             }
-        }
         webView.loadUrl(pageUrl)
     }
 
@@ -92,7 +102,6 @@ class SniffingWebView(
 
 /** Pure URL classification used by the sniffer; unit tested on the JVM. */
 object SniffRequestJudge {
-
     fun isMediaUrl(url: String): Boolean {
         val lower = url.lowercase()
         val path = lower.substringBefore('?')

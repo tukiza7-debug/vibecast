@@ -18,6 +18,14 @@ enum class ResourceType {
  * One parsed network filter rule. Matching never uses java.util.regex at request time:
  * patterns are compiled into literal/separator segment lists instead.
  */
+data class RuleOptions(
+    val types: Set<ResourceType>? = null,
+    val thirdPartyOnly: Boolean = false,
+    val firstPartyOnly: Boolean = false,
+    val includedDomains: List<String> = emptyList(),
+    val excludedDomains: List<String> = emptyList(),
+)
+
 class NetworkRule(
     val raw: String,
     val pattern: String,
@@ -27,28 +35,32 @@ class NetworkRule(
     val isEndAnchor: Boolean,
     val hostPart: String,
     val segments: List<Segment>,
-    val types: Set<ResourceType>?,
-    val thirdPartyOnly: Boolean,
-    val firstPartyOnly: Boolean,
-    val includedDomains: List<String>,
-    val excludedDomains: List<String>,
+    val options: RuleOptions,
 ) {
+    val types: Set<ResourceType>? get() = options.types
+    val thirdPartyOnly: Boolean get() = options.thirdPartyOnly
+    val firstPartyOnly: Boolean get() = options.firstPartyOnly
+    val includedDomains: List<String> get() = options.includedDomains
+    val excludedDomains: List<String> get() = options.excludedDomains
 
     sealed class Segment {
         data class Literal(val text: String) : Segment()
+
         object Separator : Segment()
+
         object Star : Segment()
     }
 
     /** True when the rule has type or domain restrictions that need per-request checks. */
     val hasContextChecks: Boolean
-        get() = types != null || thirdPartyOnly || firstPartyOnly ||
-            includedDomains.isNotEmpty() || excludedDomains.isNotEmpty()
+        get() =
+            types != null || thirdPartyOnly || firstPartyOnly ||
+                includedDomains.isNotEmpty() || excludedDomains.isNotEmpty()
 
     fun appliesToType(type: ResourceType?): Boolean {
-        if (types == null) return true
+        val allowed = types ?: return true
         if (type == null) return false
-        return type in types
+        return type in allowed
     }
 
     fun appliesToDomains(pageHost: String?): Boolean {
@@ -59,7 +71,10 @@ class NetworkRule(
         return includedDomains.any { hostMatches(pageHost, it) }
     }
 
-    fun appliesToParty(requestHost: String?, pageHost: String?): Boolean {
+    fun appliesToParty(
+        requestHost: String?,
+        pageHost: String?,
+    ): Boolean {
         if (!thirdPartyOnly && !firstPartyOnly) return true
         if (requestHost == null || pageHost == null) return true
         val third = !hostMatches(requestHost, pageHost) && !hostMatches(pageHost, requestHost)
@@ -67,7 +82,9 @@ class NetworkRule(
     }
 
     companion object {
-        fun hostMatches(host: String, domain: String): Boolean =
-            host == domain || host.endsWith(".$domain")
+        fun hostMatches(
+            host: String,
+            domain: String,
+        ): Boolean = host == domain || host.endsWith(".$domain")
     }
 }

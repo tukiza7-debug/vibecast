@@ -27,7 +27,10 @@ import coil.compose.AsyncImage
 import io.github.tukiza7_debug.vibecast.core.model.SearchItem
 
 @Composable
-fun PosterCard(item: SearchItem, onClick: () -> Unit) {
+fun PosterCard(
+    item: SearchItem,
+    onClick: () -> Unit,
+) {
     Card(
         onClick = onClick,
         modifier = Modifier.width(132.dp),
@@ -39,17 +42,19 @@ fun PosterCard(item: SearchItem, onClick: () -> Unit) {
                 model = item.cover,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(190.dp)
-                    .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)),
             )
             if (item.cover.isNullOrBlank()) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(190.dp)
-                        .background(MaterialTheme.colorScheme.surface),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(190.dp)
+                            .background(MaterialTheme.colorScheme.surface),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(item.title.take(1), style = MaterialTheme.typography.headlineMedium)
@@ -67,7 +72,10 @@ fun PosterCard(item: SearchItem, onClick: () -> Unit) {
 }
 
 @Composable
-fun ErrorState(message: String, modifier: Modifier = Modifier) {
+fun ErrorState(
+    message: String,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Something failed", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.error)
         Spacer(Modifier.height(6.dp))
@@ -76,14 +84,21 @@ fun ErrorState(message: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun EmptyState(message: String, modifier: Modifier = Modifier) {
+fun EmptyState(
+    message: String,
+    modifier: Modifier = Modifier,
+) {
     Box(modifier = modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
         Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
-fun RowHeader(title: String, subtitle: String?, modifier: Modifier = Modifier) {
+fun RowHeader(
+    title: String,
+    subtitle: String?,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier.padding(horizontal = 16.dp)) {
         Text(title, style = MaterialTheme.typography.titleLarge)
         if (subtitle != null) {
@@ -94,7 +109,10 @@ fun RowHeader(title: String, subtitle: String?, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun KeyValueRow(key: String, value: String) {
+fun KeyValueRow(
+    key: String,
+    value: String,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -105,11 +123,15 @@ fun KeyValueRow(key: String, value: String) {
 }
 
 @Composable
-fun Pill(text: String, modifier: Modifier = Modifier) {
+fun Pill(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+        modifier =
+            modifier
+                .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(text, style = MaterialTheme.typography.labelSmall)
     }
@@ -118,8 +140,9 @@ fun Pill(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun Dot(size: Int = 8) {
     Box(
-        modifier = Modifier
-            .size(size.dp)
-            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)),
+        modifier =
+            Modifier
+                .size(size.dp)
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)),
     )
 }

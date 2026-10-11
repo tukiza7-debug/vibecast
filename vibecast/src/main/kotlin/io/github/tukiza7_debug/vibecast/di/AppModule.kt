@@ -12,24 +12,22 @@ import io.github.tukiza7_debug.vibecast.adblock.net.AdBlockInterceptor
 import io.github.tukiza7_debug.vibecast.adblock.prefs.AdBlockSettings
 import io.github.tukiza7_debug.vibecast.adblock.web.SniffingWebView
 import io.github.tukiza7_debug.vibecast.core.engine.WebSniffer
-import io.github.tukiza7_debug.vibecast.core.http.HttpClient
 import io.github.tukiza7_debug.vibecast.core.http.HostFilter
+import io.github.tukiza7_debug.vibecast.core.http.HttpClient
 import io.github.tukiza7_debug.vibecast.core.http.OkHttpFetcher
 import io.github.tukiza7_debug.vibecast.player.HeadersRegistry
-import java.util.concurrent.TimeUnit
-import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-
     @Provides
     @Singleton
     fun provideAppScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -41,16 +39,17 @@ object AppModule {
         settings: AdBlockSettings,
         headersRegistry: HeadersRegistry,
     ): OkHttpClient {
-        fun currentPolicy(): SitePolicy = try {
-            runBlocking {
-                SitePolicy(
-                    disabledHosts = settings.disabledHosts.first(),
-                    bypassHosts = headersRegistry.requiredHosts(),
-                )
+        fun currentPolicy(): SitePolicy =
+            try {
+                runBlocking {
+                    SitePolicy(
+                        disabledHosts = settings.disabledHosts.first(),
+                        bypassHosts = headersRegistry.requiredHosts(),
+                    )
+                }
+            } catch (_: Exception) {
+                SitePolicy()
             }
-        } catch (_: Exception) {
-            SitePolicy()
-        }
         return OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
@@ -64,12 +63,13 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideHostFilter(engine: FilterEngine): HostFilter = HostFilter { url ->
-        engine.decide(
-            io.github.tukiza7_debug.vibecast.adblock.rules.BlockRequest(url, null, null),
-            SitePolicy(),
-        ) is io.github.tukiza7_debug.vibecast.adblock.rules.Decision.Block
-    }
+    fun provideHostFilter(engine: FilterEngine): HostFilter =
+        HostFilter { url ->
+            engine.decide(
+                io.github.tukiza7_debug.vibecast.adblock.rules.BlockRequest(url, null, null),
+                SitePolicy(),
+            ) is io.github.tukiza7_debug.vibecast.adblock.rules.Decision.Block
+        }
 
     @Provides
     @Singleton
@@ -80,7 +80,9 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): io.github.tukiza7_debug.vibecast.data.db.AppDatabase =
+    fun provideDatabase(
+        @ApplicationContext context: Context,
+    ): io.github.tukiza7_debug.vibecast.data.db.AppDatabase =
         androidx.room.Room.databaseBuilder(
             context,
             io.github.tukiza7_debug.vibecast.data.db.AppDatabase::class.java,
@@ -88,12 +90,14 @@ object AppModule {
         ).build()
 
     @Provides
-    fun provideExtensionDao(db: io.github.tukiza7_debug.vibecast.data.db.AppDatabase): io.github.tukiza7_debug.vibecast.data.db.ExtensionDao =
-        db.extensionDao()
+    fun provideExtensionDao(
+        db: io.github.tukiza7_debug.vibecast.data.db.AppDatabase,
+    ): io.github.tukiza7_debug.vibecast.data.db.ExtensionDao = db.extensionDao()
 
     @Provides
-    fun provideFavoritesDao(db: io.github.tukiza7_debug.vibecast.data.db.AppDatabase): io.github.tukiza7_debug.vibecast.data.db.FavoritesDao =
-        db.favoritesDao()
+    fun provideFavoritesDao(
+        db: io.github.tukiza7_debug.vibecast.data.db.AppDatabase,
+    ): io.github.tukiza7_debug.vibecast.data.db.FavoritesDao = db.favoritesDao()
 
     @Provides
     fun provideHistoryDao(db: io.github.tukiza7_debug.vibecast.data.db.AppDatabase): io.github.tukiza7_debug.vibecast.data.db.HistoryDao =

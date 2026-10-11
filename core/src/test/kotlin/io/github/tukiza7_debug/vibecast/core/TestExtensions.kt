@@ -5,8 +5,8 @@ package io.github.tukiza7_debug.vibecast.core
  * MockWebServer base URL so every step targets the local server.
  */
 object TestExtensions {
-
-    fun jsonSource(baseUrl: String): String = """
+    fun jsonSource(baseUrl: String): String =
+        """
         {
           "schemaVersion": 1,
           "id": "test.jsonsource",
@@ -45,9 +45,10 @@ object TestExtensions {
             "quality": { "template": "Original" }
           }
         }
-    """.trimIndent()
+        """.trimIndent()
 
-    fun htmlSource(baseUrl: String): String = """
+    fun htmlSource(baseUrl: String): String =
+        """
         {
           "schemaVersion": 1,
           "id": "test.htmlsource",
@@ -88,9 +89,10 @@ object TestExtensions {
             "pattern": "file\\s*:\\s*\"([^\"]+\\.m3u8)\""
           }
         }
-    """.trimIndent()
+        """.trimIndent()
 
-    fun iframeSource(baseUrl: String): String = """
+    fun iframeSource(baseUrl: String): String =
+        """
         {
           "schemaVersion": 1,
           "id": "test.iframesource",
@@ -120,5 +122,5 @@ object TestExtensions {
             "pattern": "file\\s*:\\s*\"([^\"]+\\.m3u8)\""
           }
         }
-    """.trimIndent()
+        """.trimIndent()
 }

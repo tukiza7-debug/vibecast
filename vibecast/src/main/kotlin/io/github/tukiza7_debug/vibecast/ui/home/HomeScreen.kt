@@ -29,51 +29,53 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.tukiza7_debug.vibecast.data.repo.FeedRepository
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
+import io.github.tukiza7_debug.vibecast.data.repo.FeedRepository
 import io.github.tukiza7_debug.vibecast.ui.common.ErrorState
 import io.github.tukiza7_debug.vibecast.ui.common.PosterCard
 import io.github.tukiza7_debug.vibecast.ui.common.RowHeader
 import io.github.tukiza7_debug.vibecast.ui.nav.detailRouteFor
-import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltViewModel
-class HomeViewModel @Inject constructor(
-    private val extensionRepository: ExtensionRepository,
-    private val feedRepository: FeedRepository,
-) : ViewModel() {
+class HomeViewModel
+    @Inject
+    constructor(
+        private val extensionRepository: ExtensionRepository,
+        private val feedRepository: FeedRepository,
+    ) : ViewModel() {
+        val extensions =
+            extensionRepository.observeAll()
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val extensions = extensionRepository.observeAll()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        private val _rows = MutableStateFlow<List<FeedRepository.HomeRow>>(emptyList())
+        val rows: StateFlow<List<FeedRepository.HomeRow>> = _rows.asStateFlow()
 
-    private val _rows = MutableStateFlow<List<FeedRepository.HomeRow>>(emptyList())
-    val rows: StateFlow<List<FeedRepository.HomeRow>> = _rows.asStateFlow()
+        private val _refreshing = MutableStateFlow(false)
+        val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
-    private val _refreshing = MutableStateFlow(false)
-    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+        init {
+            refresh()
+            viewModelScope.launch {
+                extensions.collect { refresh() }
+            }
+        }
 
-    init {
-        refresh()
-        viewModelScope.launch {
-            extensions.collect { refresh() }
+        fun refresh() {
+            viewModelScope.launch {
+                _refreshing.value = true
+                val enabled = extensionRepository.enabled()
+                _rows.value = feedRepository.homeRows(enabled)
+                _refreshing.value = false
+            }
         }
     }
-
-    fun refresh() {
-        viewModelScope.launch {
-            _refreshing.value = true
-            val enabled = extensionRepository.enabled()
-            _rows.value = feedRepository.homeRows(enabled)
-            _refreshing.value = false
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

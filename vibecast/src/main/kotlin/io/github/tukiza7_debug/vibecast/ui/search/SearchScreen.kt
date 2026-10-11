@@ -26,14 +26,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.tukiza7_debug.vibecast.data.repo.FeedRepository
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
+import io.github.tukiza7_debug.vibecast.data.repo.FeedRepository
 import io.github.tukiza7_debug.vibecast.ui.common.EmptyState
 import io.github.tukiza7_debug.vibecast.ui.common.ErrorState
 import io.github.tukiza7_debug.vibecast.ui.common.PosterCard
 import io.github.tukiza7_debug.vibecast.ui.common.RowHeader
 import io.github.tukiza7_debug.vibecast.ui.nav.detailRouteFor
-import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +41,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class SearchGroup(
     val extensionId: String,
@@ -51,67 +51,74 @@ data class SearchGroup(
 )
 
 @HiltViewModel
-class SearchViewModel @Inject constructor(
-    private val extensionRepository: ExtensionRepository,
-    private val feedRepository: FeedRepository,
-) : ViewModel() {
+class SearchViewModel
+    @Inject
+    constructor(
+        private val extensionRepository: ExtensionRepository,
+        private val feedRepository: FeedRepository,
+    ) : ViewModel() {
+        val extensions =
+            extensionRepository.observeAll()
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val extensions = extensionRepository.observeAll()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        private val _query = MutableStateFlow("")
+        val query: StateFlow<String> = _query.asStateFlow()
 
-    private val _query = MutableStateFlow("")
-    val query: StateFlow<String> = _query.asStateFlow()
+        private val _selected = MutableStateFlow<String?>(null)
+        val selected: StateFlow<String?> = _selected.asStateFlow()
 
-    private val _selected = MutableStateFlow<String?>(null)
-    val selected: StateFlow<String?> = _selected.asStateFlow()
+        private val _groups = MutableStateFlow<List<SearchGroup>>(emptyList())
+        val groups: StateFlow<List<SearchGroup>> = _groups.asStateFlow()
 
-    private val _groups = MutableStateFlow<List<SearchGroup>>(emptyList())
-    val groups: StateFlow<List<SearchGroup>> = _groups.asStateFlow()
+        private val _busy = MutableStateFlow(false)
+        val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
-    private val _busy = MutableStateFlow(false)
-    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+        private var searchJob: Job? = null
 
-    private var searchJob: Job? = null
-
-    fun onQueryChange(value: String) {
-        _query.value = value
-        searchJob?.cancel()
-        if (value.isBlank()) {
-            _groups.value = emptyList()
-            return
-        }
-        searchJob = viewModelScope.launch {
-            delay(300)
-            runSearch(value)
-        }
-    }
-
-    fun onExtensionFilter(id: String?) {
-        _selected.value = id
-        if (_query.value.isNotBlank()) {
+        fun onQueryChange(value: String) {
+            _query.value = value
             searchJob?.cancel()
-            searchJob = viewModelScope.launch { runSearch(_query.value) }
+            if (value.isBlank()) {
+                _groups.value = emptyList()
+                return
+            }
+            searchJob =
+                viewModelScope.launch {
+                    delay(300)
+                    runSearch(value)
+                }
         }
-    }
 
-    private suspend fun runSearch(query: String) {
-        _busy.value = true
-        val enabled = extensionRepository.enabled()
-        val targets = enabled.filter { _selected.value == null || it.id == _selected.value }
-        _groups.value = targets.map { entity ->
-            try {
-                val ext = feedRepository.load(entity)
-                SearchGroup(entity.id, entity.name, feedRepository.search(ext, query, 1), error = null)
-            } catch (e: Exception) {
-                SearchGroup(entity.id, entity.name, emptyList(), error = e.message ?: "search failed")
+        fun onExtensionFilter(id: String?) {
+            _selected.value = id
+            if (_query.value.isNotBlank()) {
+                searchJob?.cancel()
+                searchJob = viewModelScope.launch { runSearch(_query.value) }
             }
         }
-        _busy.value = false
+
+        private suspend fun runSearch(query: String) {
+            _busy.value = true
+            val enabled = extensionRepository.enabled()
+            val targets = enabled.filter { _selected.value == null || it.id == _selected.value }
+            _groups.value =
+                targets.map { entity ->
+                    try {
+                        val ext = feedRepository.load(entity)
+                        SearchGroup(entity.id, entity.name, feedRepository.search(ext, query, 1), error = null)
+                    } catch (e: Exception) {
+                        SearchGroup(entity.id, entity.name, emptyList(), error = e.message ?: "search failed")
+                    }
+                }
+            _busy.value = false
+        }
     }
-}
 
 @Composable
-fun SearchScreen(onOpenDetail: (String) -> Unit, viewModel: SearchViewModel = hiltViewModel()) {
+fun SearchScreen(
+    onOpenDetail: (String) -> Unit,
+    viewModel: SearchViewModel = hiltViewModel(),
+) {
     val query by viewModel.query.collectAsState()
     val selected by viewModel.selected.collectAsState()
     val groups by viewModel.groups.collectAsState()
@@ -128,9 +135,10 @@ fun SearchScreen(onOpenDetail: (String) -> Unit, viewModel: SearchViewModel = hi
             },
             label = { Text("Search one or all extensions") },
             singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
         )
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -158,16 +166,17 @@ fun SearchScreen(onOpenDetail: (String) -> Unit, viewModel: SearchViewModel = hi
                     when {
                         group.error != null -> item(key = "${group.extensionId}-err") { ErrorState(group.error ?: "") }
                         group.items.isEmpty() -> item(key = "${group.extensionId}-empty") { EmptyState("No results") }
-                        else -> item(key = "${group.extensionId}-items") {
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                items(group.items, key = { it.url }) { item ->
-                                    PosterCard(item) { onOpenDetail(detailRouteFor(group.extensionId, item)) }
+                        else ->
+                            item(key = "${group.extensionId}-items") {
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    items(group.items, key = { it.url }) { item ->
+                                        PosterCard(item) { onOpenDetail(detailRouteFor(group.extensionId, item)) }
+                                    }
                                 }
                             }
-                        }
                     }
                     item(key = "${group.extensionId}-space") { Spacer(Modifier.height(10.dp)) }
                 }

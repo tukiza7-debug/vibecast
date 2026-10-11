@@ -22,13 +22,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,15 +48,14 @@ import io.github.tukiza7_debug.vibecast.data.db.ExtensionEntity
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
 import io.github.tukiza7_debug.vibecast.data.repo.FeedRepository
 import io.github.tukiza7_debug.vibecast.data.repo.HistoryRepository
-import io.github.tukiza7_debug.vibecast.player.PlaybackMeta
 import io.github.tukiza7_debug.vibecast.player.PlayerConnection
 import io.github.tukiza7_debug.vibecast.ui.common.ErrorState
-import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class DetailState(
     val loading: Boolean = true,
@@ -69,85 +68,93 @@ data class DetailState(
 )
 
 @HiltViewModel
-class DetailViewModel @Inject constructor(
-    private val extensionRepository: ExtensionRepository,
-    private val feedRepository: FeedRepository,
-    private val historyRepository: HistoryRepository,
-    private val playerConnection: PlayerConnection,
-    private val settings: io.github.tukiza7_debug.vibecast.data.prefs.SettingsStore,
-) : ViewModel() {
+class DetailViewModel
+    @Inject
+    constructor(
+        private val extensionRepository: ExtensionRepository,
+        private val feedRepository: FeedRepository,
+        private val historyRepository: HistoryRepository,
+        private val playerConnection: PlayerConnection,
+        private val settings: io.github.tukiza7_debug.vibecast.data.prefs.SettingsStore,
+    ) : ViewModel() {
+        private val _state = MutableStateFlow(DetailState())
+        val state: StateFlow<DetailState> = _state.asStateFlow()
 
-    private val _state = MutableStateFlow(DetailState())
-    val state: StateFlow<DetailState> = _state.asStateFlow()
+        private var extension: io.github.tukiza7_debug.vibecast.core.model.Extension? = null
+        private var entity: ExtensionEntity? = null
+        private var itemUrl: String = ""
+        private var title: String = ""
 
-    private var extension: io.github.tukiza7_debug.vibecast.core.model.Extension? = null
-    private var entity: ExtensionEntity? = null
-    private var itemUrl: String = ""
-    private var title: String = ""
-
-    fun load(extensionId: String, itemUrl: String, title: String, cover: String?) {
-        if (this.itemUrl == itemUrl && !_state.value.loading && extension != null) return
-        this.itemUrl = itemUrl
-        this.title = title
-        _state.value = DetailState(loading = true, cover = cover)
-        viewModelScope.launch {
-            try {
-                val e = extensionRepository.get(extensionId) ?: throw IllegalStateException("extension not installed")
-                entity = e
-                val ext = feedRepository.load(e)
-                extension = ext
-                val detail = feedRepository.detail(ext, itemUrl)
-                val episodes = feedRepository.episodes(ext, itemUrl)
-                val resume = historyRepository.resumePosition(extensionId, itemUrl)
-                _state.value = DetailState(
-                    loading = false,
-                    synopsis = detail.synopsis,
-                    cover = cover ?: detail.cover,
-                    episodes = episodes,
-                    resumeMs = resume,
-                    isFavorite = historyRepository.isFavorite(extensionId, itemUrl),
-                )
-            } catch (ex: Exception) {
-                _state.value = DetailState(loading = false, error = ex.message ?: "failed to load", cover = cover)
-            }
-        }
-    }
-
-    fun toggleFavorite() {
-        val id = entity?.id ?: return
-        viewModelScope.launch {
-            val added = historyRepository.toggleFavorite(id, title, itemUrl, _state.value.cover)
-            _state.value = _state.value.copy(isFavorite = added)
-        }
-    }
-
-    fun play(episodeIndex: Int) {
-        val ext = extension ?: return
-        val id = entity?.id ?: return
-        val episodes = _state.value.episodes
-        if (episodes.isEmpty()) return
-        viewModelScope.launch {
-            try {
-                val startMs = if (episodeIndex == 0) _state.value.resumeMs else 0L
-                val items = episodes.map { episode ->
-                    val stream = feedRepository.stream(ext, episode.url)
-                    PlayerConnection.PlaybackItem(
-                        mediaId = episode.url,
-                        title = episode.name,
-                        streamRef = stream,
-                        extensionId = id,
-                        cover = _state.value.cover,
-                        baseUrl = ext.baseUrl,
-                    )
+        fun load(
+            extensionId: String,
+            itemUrl: String,
+            title: String,
+            cover: String?,
+        ) {
+            if (this.itemUrl == itemUrl && !_state.value.loading && extension != null) return
+            this.itemUrl = itemUrl
+            this.title = title
+            _state.value = DetailState(loading = true, cover = cover)
+            viewModelScope.launch {
+                try {
+                    val e = extensionRepository.get(extensionId) ?: throw IllegalStateException("extension not installed")
+                    entity = e
+                    val ext = feedRepository.load(e)
+                    extension = ext
+                    val detail = feedRepository.detail(ext, itemUrl)
+                    val episodes = feedRepository.episodes(ext, itemUrl)
+                    val resume = historyRepository.resumePosition(extensionId, itemUrl)
+                    _state.value =
+                        DetailState(
+                            loading = false,
+                            synopsis = detail.synopsis,
+                            cover = cover ?: detail.cover,
+                            episodes = episodes,
+                            resumeMs = resume,
+                            isFavorite = historyRepository.isFavorite(extensionId, itemUrl),
+                        )
+                } catch (ex: Exception) {
+                    _state.value = DetailState(loading = false, error = ex.message ?: "failed to load", cover = cover)
                 }
-                val speed = settings.defaultSpeed.firstOrNull() ?: 1f
-                playerConnection.setPlaylist(items, episodeIndex, startMs, speed)
-            } catch (ex: Exception) {
-                _state.value = _state.value.copy(error = ex.message ?: "playback failed to start")
+            }
+        }
+
+        fun toggleFavorite() {
+            val id = entity?.id ?: return
+            viewModelScope.launch {
+                val added = historyRepository.toggleFavorite(id, title, itemUrl, _state.value.cover)
+                _state.value = _state.value.copy(isFavorite = added)
+            }
+        }
+
+        fun play(episodeIndex: Int) {
+            val ext = extension ?: return
+            val id = entity?.id ?: return
+            val episodes = _state.value.episodes
+            if (episodes.isEmpty()) return
+            viewModelScope.launch {
+                try {
+                    val startMs = if (episodeIndex == 0) _state.value.resumeMs else 0L
+                    val items =
+                        episodes.map { episode ->
+                            val stream = feedRepository.stream(ext, episode.url)
+                            PlayerConnection.PlaybackItem(
+                                mediaId = episode.url,
+                                title = episode.name,
+                                streamRef = stream,
+                                extensionId = id,
+                                cover = _state.value.cover,
+                                baseUrl = ext.baseUrl,
+                            )
+                        }
+                    val speed = settings.defaultSpeed.firstOrNull() ?: 1f
+                    playerConnection.setPlaylist(items, episodeIndex, startMs, speed)
+                } catch (ex: Exception) {
+                    _state.value = _state.value.copy(error = ex.message ?: "playback failed to start")
+                }
             }
         }
     }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,10 +196,11 @@ fun DetailScreen(
                     model = state.cover ?: cover,
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .width(130.dp)
-                        .aspectRatio(0.68f)
-                        .clip(MaterialTheme.shapes.medium),
+                    modifier =
+                        Modifier
+                            .width(130.dp)
+                            .aspectRatio(0.68f)
+                            .clip(MaterialTheme.shapes.medium),
                 )
                 Spacer(Modifier.width(14.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -218,25 +226,27 @@ fun DetailScreen(
         }
         item { Spacer(Modifier.height(8.dp)) }
         when {
-            state.loading -> item {
-                Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+            state.loading ->
+                item {
+                    Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
-            }
             state.error != null -> item { ErrorState(state.error ?: "") }
-            else -> items(state.episodes, key = { it.url }) { episode ->
-                val index = state.episodes.indexOf(episode)
-                ListItem(
-                    headlineContent = { Text(episode.name) },
-                    supportingContent = { episode.number?.let { Text("Episode $it") } },
-                    leadingContent = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
-                    tonalElevation = 0.dp,
-                    trailingContent = {
-                        Button(onClick = { viewModel.play(index) }) { Text("Play") }
-                    },
-                )
-            }
+            else ->
+                items(state.episodes, key = { it.url }) { episode ->
+                    val index = state.episodes.indexOf(episode)
+                    ListItem(
+                        headlineContent = { Text(episode.name) },
+                        supportingContent = { episode.number?.let { Text("Episode $it") } },
+                        leadingContent = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
+                        tonalElevation = 0.dp,
+                        trailingContent = {
+                            Button(onClick = { viewModel.play(index) }) { Text("Play") }
+                        },
+                    )
+                }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }

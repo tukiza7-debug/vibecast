@@ -28,25 +28,26 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.addonx.data.BuildStore
 import io.github.tukiza7_debug.vibecast.addonx.data.TokenStore
-import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltViewModel
-class SettingsViewModel @Inject constructor(
-    private val tokenStore: TokenStore,
-    private val buildStore: BuildStore,
-) : ViewModel() {
+class SettingsViewModel
+    @Inject
+    constructor(
+        private val tokenStore: TokenStore,
+        private val buildStore: BuildStore,
+    ) : ViewModel() {
+        val theme = buildStore.theme.stateIn(viewModelScope, SharingStarted.Eagerly, "dark")
 
-    val theme = buildStore.theme.stateIn(viewModelScope, SharingStarted.Eagerly, "dark")
+        fun setTheme(value: String) = viewModelScope.launch { buildStore.setTheme(value) }
 
-    fun setTheme(value: String) = viewModelScope.launch { buildStore.setTheme(value) }
+        fun saveToken(token: String?) = tokenStore.saveToken(token?.trim()?.takeIf { it.isNotBlank() })
 
-    fun saveToken(token: String?) = tokenStore.saveToken(token?.trim()?.takeIf { it.isNotBlank() })
-
-    fun hasToken(): Boolean = tokenStore.token() != null
-}
+        fun hasToken(): Boolean = tokenStore.token() != null
+    }
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {

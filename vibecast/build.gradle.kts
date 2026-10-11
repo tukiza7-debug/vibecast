@@ -12,9 +12,10 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
-val brand = Properties().apply {
-    rootProject.file("brand.properties").inputStream().use { load(it) }
-}
+val brand =
+    Properties().apply {
+        rootProject.file("brand.properties").inputStream().use { load(it) }
+    }
 
 val sitePackageId = providers.gradleProperty("sitePackageId").orNull
 val siteAppName = providers.gradleProperty("siteAppName").orNull
@@ -38,7 +39,7 @@ android {
 
         val permission = brand.getProperty("vibecast.extensionPermission")
         manifestPlaceholders["vibecastPermission"] = permission
-        manifestPlaceholders["extensionAuthority"] = "${applicationId}.extensions"
+        manifestPlaceholders["extensionAuthority"] = "$applicationId.extensions"
     }
 
     signingConfigs {

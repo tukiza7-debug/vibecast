@@ -12,12 +12,12 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import io.github.tukiza7_debug.vibecast.data.prefs.SettingsStore
-import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
 import io.github.tukiza7_debug.vibecast.data.remote.UpdateRepository
+import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.first
 
 object Scheduler {
     fun scheduleUpdateChecks(context: Context) {
@@ -40,38 +40,43 @@ object Scheduler {
 }
 
 @HiltWorker
-class AppUpdateWorker @AssistedInject constructor(
-    @Assisted appContext: Context,
-    @Assisted params: WorkerParameters,
-    private val updateRepository: UpdateRepository,
-) : CoroutineWorker(appContext, params) {
-
-    override suspend fun doWork(): Result = when (val result = updateRepository.check()) {
-        is UpdateRepository.CheckResult.Failed -> Result.retry()
-        else -> Result.success()
+class AppUpdateWorker
+    @AssistedInject
+    constructor(
+        @Assisted appContext: Context,
+        @Assisted params: WorkerParameters,
+        private val updateRepository: UpdateRepository,
+    ) : CoroutineWorker(appContext, params) {
+        override suspend fun doWork(): Result =
+            when (val result = updateRepository.check()) {
+                is UpdateRepository.CheckResult.Failed -> Result.retry()
+                else -> Result.success()
+            }
     }
-}
 
 @HiltWorker
-class ExtensionUpdateWorker @AssistedInject constructor(
-    @Assisted appContext: Context,
-    @Assisted params: WorkerParameters,
-    private val extensionRepository: ExtensionRepository,
-) : CoroutineWorker(appContext, params) {
-
-    override suspend fun doWork(): Result {
-        val updated = runCatching { extensionRepository.checkForUpdates() }.getOrDefault(emptyList())
-        return Result.success()
+class ExtensionUpdateWorker
+    @AssistedInject
+    constructor(
+        @Assisted appContext: Context,
+        @Assisted params: WorkerParameters,
+        private val extensionRepository: ExtensionRepository,
+    ) : CoroutineWorker(appContext, params) {
+        override suspend fun doWork(): Result {
+            val updated = runCatching { extensionRepository.checkForUpdates() }.getOrDefault(emptyList())
+            return Result.success()
+        }
     }
-}
 
 /** Periodic extension update runner that keeps the source references pinned. */
 @Singleton
-class ExtensionUpdateService @Inject constructor(
-    private val extensionRepository: ExtensionRepository,
-    private val settings: SettingsStore,
-) {
-    suspend fun runOnce(): List<String> = extensionRepository.checkForUpdates()
+class ExtensionUpdateService
+    @Inject
+    constructor(
+        private val extensionRepository: ExtensionRepository,
+        private val settings: SettingsStore,
+    ) {
+        suspend fun runOnce(): List<String> = extensionRepository.checkForUpdates()
 
-    suspend fun shouldCheckAutomatically(): Boolean = settings.autoUpdateCheck.first()
-}
+        suspend fun shouldCheckAutomatically(): Boolean = settings.autoUpdateCheck.first()
+    }

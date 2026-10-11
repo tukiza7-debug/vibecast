@@ -8,16 +8,15 @@ import io.github.tukiza7_debug.vibecast.adblock.update.FilterEngineLoader
 import io.github.tukiza7_debug.vibecast.adblock.update.FilterUpdateWorker
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
 import io.github.tukiza7_debug.vibecast.work.Scheduler
-import java.util.Base64
-import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.Base64
+import javax.inject.Inject
 
 @HiltAndroidApp
 class VibecastApplication : Application(), Configuration.Provider {
-
     @Inject lateinit var workerFactory: HiltWorkerFactory
 
     @Inject lateinit var filterEngineLoader: FilterEngineLoader
@@ -44,11 +43,12 @@ class VibecastApplication : Application(), Configuration.Provider {
     private suspend fun installBundledExtensionIfPresent() {
         val encoded = getString(R.string.bundled_extension_b64)
         if (encoded.isBlank()) return
-        val json = try {
-            String(Base64.getMimeDecoder().decode(encoded), Charsets.UTF_8)
-        } catch (_: IllegalArgumentException) {
-            return
-        }
+        val json =
+            try {
+                String(Base64.getMimeDecoder().decode(encoded), Charsets.UTF_8)
+            } catch (_: IllegalArgumentException) {
+                return
+            }
         bundledExtensionInstaller.get().installBundled(json)
     }
 }

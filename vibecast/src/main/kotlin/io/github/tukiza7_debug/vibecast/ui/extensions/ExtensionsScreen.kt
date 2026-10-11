@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -40,63 +39,70 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.data.db.ExtensionEntity
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
-import io.github.tukiza7_debug.vibecast.data.repo.ImportErrorException
 import io.github.tukiza7_debug.vibecast.importcode.ImportPromptBus
-import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltViewModel
-class ExtensionsViewModel @Inject constructor(
-    private val repository: ExtensionRepository,
-    val importBus: ImportPromptBus,
-) : ViewModel() {
+class ExtensionsViewModel
+    @Inject
+    constructor(
+        private val repository: ExtensionRepository,
+        val importBus: ImportPromptBus,
+    ) : ViewModel() {
+        val extensions =
+            repository.observeAll()
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val extensions = repository.observeAll()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        var lastError = mutableStateOf<String?>(null)
+            private set
 
-    var lastError = mutableStateOf<String?>(null)
-        private set
+        fun addByCode(
+            code: String,
+            origin: String = "typed",
+        ) {
+            viewModelScope.launch {
+                runCatching { repository.importByCode(code, origin) }
+                    .onFailure { lastError.value = it.message }
+            }
+        }
 
-    fun addByCode(code: String, origin: String = "typed") {
-        viewModelScope.launch {
-            runCatching { repository.importByCode(code, origin) }
-                .onFailure { lastError.value = it.message }
+        fun installFromFile(text: String) {
+            viewModelScope.launch {
+                runCatching { repository.importJson(text, "file") }
+                    .onFailure { lastError.value = it.message }
+            }
+        }
+
+        fun setEnabled(
+            id: String,
+            enabled: Boolean,
+        ) {
+            viewModelScope.launch { repository.setEnabled(id, enabled) }
+        }
+
+        fun remove(id: String) {
+            viewModelScope.launch { repository.remove(id) }
+        }
+
+        fun update(id: String) {
+            viewModelScope.launch {
+                runCatching { repository.checkForUpdates() }
+                    .onSuccess { if (it.isEmpty()) lastError.value = "No newer version available" }
+                    .onFailure { lastError.value = it.message }
+            }
+        }
+
+        fun undoAdd(id: String) {
+            viewModelScope.launch { repository.remove(id) }
+        }
+
+        fun clearError() {
+            lastError.value = null
         }
     }
-
-    fun installFromFile(text: String) {
-        viewModelScope.launch {
-            runCatching { repository.importJson(text, "file") }
-                .onFailure { lastError.value = it.message }
-        }
-    }
-
-    fun setEnabled(id: String, enabled: Boolean) {
-        viewModelScope.launch { repository.setEnabled(id, enabled) }
-    }
-
-    fun remove(id: String) {
-        viewModelScope.launch { repository.remove(id) }
-    }
-
-    fun update(id: String) {
-        viewModelScope.launch {
-            runCatching { repository.checkForUpdates() }
-                .onSuccess { if (it.isEmpty()) lastError.value = "No newer version available" }
-                .onFailure { lastError.value = it.message }
-        }
-    }
-
-    fun undoAdd(id: String) {
-        viewModelScope.launch { repository.remove(id) }
-    }
-
-    fun clearError() {
-        lastError.value = null
-    }
-}
 
 @Composable
 fun ExtensionsScreen(
@@ -108,14 +114,16 @@ fun ExtensionsScreen(
     var lastMessage by remember { mutableStateOf<String?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            val text = runCatching {
-                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-            }.getOrNull()
-            if (text != null) viewModel.installFromFile(text) else lastMessage = "Could not read the selected file"
+    val filePicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                val text =
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    }.getOrNull()
+                if (text != null) viewModel.installFromFile(text) else lastMessage = "Could not read the selected file"
+            }
         }
-    }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
         item {
@@ -178,9 +186,10 @@ private fun ExtensionCard(
     onRemove: () -> Unit,
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
         shape = MaterialTheme.shapes.medium,
     ) {
         Column(Modifier.padding(14.dp)) {

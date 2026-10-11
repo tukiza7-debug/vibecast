@@ -12,7 +12,6 @@ import java.util.zip.Inflater
  * payload string as eight lowercase hex characters. Self-contained and offline.
  */
 object UnixCodec {
-
     const val PREFIX = "unix1:"
     const val MAX_DECOMPRESSED_BYTES = 512 * 1024
     const val MAX_COMPRESSED_CHARS = 700_000
@@ -47,8 +46,7 @@ object UnixCodec {
         return String(json, Charsets.UTF_8)
     }
 
-    private fun crcOf(payload: String): Long =
-        CRC32().apply { update(payload.toByteArray(Charsets.US_ASCII)) }.value
+    private fun crcOf(payload: String): Long = CRC32().apply { update(payload.toByteArray(Charsets.US_ASCII)) }.value
 
     private fun compress(bytes: ByteArray): String {
         val deflater = Deflater(Deflater.BEST_COMPRESSION, true)
@@ -69,11 +67,12 @@ object UnixCodec {
 
     private fun decompress(payload: String): ByteArray {
         val padded = payload + "=".repeat((4 - payload.length % 4) % 4)
-        val compressed = try {
-            Base64.getUrlDecoder().decode(padded)
-        } catch (_: IllegalArgumentException) {
-            throw CodeException("payload is not valid base64url")
-        }
+        val compressed =
+            try {
+                Base64.getUrlDecoder().decode(padded)
+            } catch (_: IllegalArgumentException) {
+                throw CodeException("payload is not valid base64url")
+            }
         val inflater = Inflater(true)
         val out = ByteArrayOutputStream()
         try {

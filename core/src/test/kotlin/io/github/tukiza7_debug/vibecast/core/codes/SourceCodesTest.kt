@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SourceCodesTest {
-
     @Test
     fun `gc1 parses owner repo path and ref`() {
         val source = SourceCodes.parse("gc1:alice/videos/extensions/net.example.one.json@v2")

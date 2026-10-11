@@ -7,13 +7,11 @@ import io.github.tukiza7_debug.vibecast.adblock.rules.UrlMatcher
  * without a WebView. Applied from WebViewClient navigation callbacks.
  */
 object PopupGuard {
-
     enum class Action { ALLOW, BLOCK }
 
     private val safeSchemes = setOf("about", "blob", "data", "javascript", "file")
 
-    fun onCreateWindow(isUserGesture: Boolean): Action =
-        if (isUserGesture) Action.ALLOW else Action.BLOCK
+    fun onCreateWindow(isUserGesture: Boolean): Action = if (isUserGesture) Action.ALLOW else Action.BLOCK
 
     fun onTopLevelNavigation(
         url: String,
@@ -34,7 +32,10 @@ object PopupGuard {
         return if (sameSite(target, current)) Action.ALLOW else Action.BLOCK
     }
 
-    private fun sameSite(a: String, b: String): Boolean {
+    private fun sameSite(
+        a: String,
+        b: String,
+    ): Boolean {
         if (a == b) return true
         return a.endsWith(".$b") || b.endsWith(".$a")
     }

@@ -17,23 +17,24 @@ class AdBlockInterceptor(
     private val engine: FilterEngine,
     private val policyProvider: () -> SitePolicy,
 ) : Interceptor {
-
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val accept = request.header("Accept")
-        val type = when {
-            accept?.contains("text/css") == true -> ResourceType.STYLESHEET
-            accept?.contains("image/") == true -> ResourceType.IMAGE
-            else -> null
-        }
-        val decision = engine.decide(
-            BlockRequest(
-                url = request.url.toString(),
-                pageHost = request.header("Referer")?.let { io.github.tukiza7_debug.vibecast.adblock.rules.UrlMatcher.hostOf(it) },
-                type = type,
-            ),
-            policyProvider(),
-        )
+        val type =
+            when {
+                accept?.contains("text/css") == true -> ResourceType.STYLESHEET
+                accept?.contains("image/") == true -> ResourceType.IMAGE
+                else -> null
+            }
+        val decision =
+            engine.decide(
+                BlockRequest(
+                    url = request.url.toString(),
+                    pageHost = request.header("Referer")?.let { io.github.tukiza7_debug.vibecast.adblock.rules.UrlMatcher.hostOf(it) },
+                    type = type,
+                ),
+                policyProvider(),
+            )
         if (decision is Decision.Block) {
             return Response.Builder()
                 .request(request)

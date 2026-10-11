@@ -12,10 +12,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.addonx.data.BuildStore
 import io.github.tukiza7_debug.vibecast.addonx.ui.theme.AddOnXTheme
-import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -32,6 +31,8 @@ class MainActivity : ComponentActivity() {
 }
 
 @HiltViewModel
-class MainActivityViewModel @Inject constructor(buildStore: BuildStore) : ViewModel() {
-    val theme = buildStore.theme.stateIn(viewModelScope, SharingStarted.Eagerly, "dark")
-}
+class MainActivityViewModel
+    @Inject
+    constructor(buildStore: BuildStore) : ViewModel() {
+        val theme = buildStore.theme.stateIn(viewModelScope, SharingStarted.Eagerly, "dark")
+    }

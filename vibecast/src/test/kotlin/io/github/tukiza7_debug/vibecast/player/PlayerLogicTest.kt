@@ -2,7 +2,6 @@ package io.github.tukiza7_debug.vibecast.player
 
 import androidx.media3.common.PlaybackException
 import io.github.tukiza7_debug.vibecast.core.model.StreamRef
-import io.github.tukiza7_debug.vibecast.core.model.SubtitleTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -10,8 +9,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MediaItemFactoryTest {
-
-    private fun ref(url: String, mime: String? = null) = StreamRef(url, mime, emptyMap())
+    private fun ref(
+        url: String,
+        mime: String? = null,
+    ) = StreamRef(url, mime, emptyMap())
 
     @Test
     fun `m3u8 url without mime resolves to hls`() {
@@ -58,7 +59,6 @@ class MediaItemFactoryTest {
 }
 
 class HeadersRegistryTest {
-
     @Test
     fun `headers apply per stream host and subdomain`() {
         val registry = HeadersRegistry()
@@ -92,7 +92,6 @@ class HeadersRegistryTest {
 }
 
 class PlaybackRecoveryTest {
-
     @Test
     fun `network errors retry with backoff up to the limit`() {
         assertEquals(

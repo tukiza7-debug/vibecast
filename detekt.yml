@@ -9,7 +9,7 @@ complexity:
   LongParameterList:
     active: true
     functionThreshold: 10
-    constructorThreshold: 10
+    constructorThreshold: 13
     ignoreDefaultParameters: true
   NestedBlockDepth:
     threshold: 6
@@ -37,6 +37,7 @@ naming:
     active: true
     ignoreAnnotated:
       - Composable
+      - Test
   MatchingDeclarationName:
     active: false
 

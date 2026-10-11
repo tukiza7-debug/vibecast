@@ -7,7 +7,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ExtensionDomainsTest {
-
     @Test
     fun `collects distinct hosts from every step`() {
         val server = MockWebServer()
@@ -25,8 +24,9 @@ class ExtensionDomainsTest {
         server.start()
         val base = server.url("/").toString()
         server.shutdown()
-        val json = TestExtensions.jsonSource(base)
-            .replace("${base}search?", "https://api.other.test/search?")
+        val json =
+            TestExtensions.jsonSource(base)
+                .replace("${base}search?", "https://api.other.test/search?")
         val extension = SchemaValidator.decodeAndValidate(json)
         assertEquals(listOf("api.other.test", "localhost"), ExtensionDomains.of(extension))
     }

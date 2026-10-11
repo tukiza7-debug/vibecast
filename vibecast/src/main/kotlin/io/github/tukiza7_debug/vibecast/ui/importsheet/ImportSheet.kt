@@ -22,20 +22,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
-import io.github.tukiza7_debug.vibecast.data.repo.ImportErrorException
 import io.github.tukiza7_debug.vibecast.importcode.ImportPromptBus
-import javax.inject.Inject
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /** Holds the visible confirmation state driven by deep links, shares and clipboard. */
 class ImportPromptController(bus: ImportPromptBus) {
-
     data class Pending(
         val code: String,
         val origin: String,
@@ -54,7 +52,10 @@ class ImportPromptController(bus: ImportPromptBus) {
         }
     }
 
-    fun offer(code: String, origin: String) {
+    fun offer(
+        code: String,
+        origin: String,
+    ) {
         _pending.value = Pending(code, origin, details = null, error = null)
     }
 
@@ -64,25 +65,34 @@ class ImportPromptController(bus: ImportPromptBus) {
 }
 
 @HiltViewModel
-class ImportViewModel @Inject constructor(
-    private val repository: ExtensionRepository,
-) : ViewModel() {
+class ImportViewModel
+    @Inject
+    constructor(
+        private val repository: ExtensionRepository,
+    ) : ViewModel() {
+        fun resolve(
+            code: String,
+            onResolved: (ExtensionRepository.PendingImport) -> Unit,
+            onError: (String) -> Unit,
+        ) {
+            viewModelScope.launch {
+                runCatching { repository.codeDetails(code) }
+                    .onSuccess(onResolved)
+                    .onFailure { onError(it.message ?: "invalid code") }
+            }
+        }
 
-    fun resolve(code: String, onResolved: (ExtensionRepository.PendingImport) -> Unit, onError: (String) -> Unit) {
-        viewModelScope.launch {
-            runCatching { repository.codeDetails(code) }
-                .onSuccess(onResolved)
-                .onFailure { onError(it.message ?: "invalid code") }
+        fun add(
+            code: String,
+            origin: String,
+            onDone: (Result<ExtensionRepository.ImportResult>) -> Unit,
+        ) {
+            viewModelScope.launch {
+                val result = runCatching { repository.importByCode(code, origin) }
+                onDone(result)
+            }
         }
     }
-
-    fun add(code: String, origin: String, onDone: (Result<ExtensionRepository.ImportResult>) -> Unit) {
-        viewModelScope.launch {
-            val result = runCatching { repository.importByCode(code, origin) }
-            onDone(result)
-        }
-    }
-}
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -106,10 +116,11 @@ fun ImportSheetHost(controller: ImportPromptController) {
 
     ModalBottomSheet(onDismissRequest = { controller.dismiss() }) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("Add extension", style = MaterialTheme.typography.headlineMedium)
@@ -125,10 +136,11 @@ fun ImportSheetHost(controller: ImportPromptController) {
                     Text("id: ${d.id}  version: ${d.version}")
                     Text("Will contact: ${d.domains.joinToString()}")
                 }
-                error != null -> Text(
-                    "This code is not usable: $error",
-                    color = MaterialTheme.colorScheme.error,
-                )
+                error != null ->
+                    Text(
+                        "This code is not usable: $error",
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 else -> CircularProgressIndicator()
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

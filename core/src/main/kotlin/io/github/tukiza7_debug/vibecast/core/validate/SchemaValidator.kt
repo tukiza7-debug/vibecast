@@ -13,7 +13,6 @@ import kotlinx.serialization.json.jsonObject
  * the field so the person who built the extension can fix the exact spot.
  */
 object SchemaValidator {
-
     const val SUPPORTED_SCHEMA_VERSION = 1
     const val MAX_JSON_BYTES = 512 * 1024
 
@@ -22,27 +21,31 @@ object SchemaValidator {
     private val strategies = setOf("direct", "iframe", "regex", "webviewSniff")
     private val listSteps = listOf("search", "latest", "popular")
     private val requiredListSteps = listOf("search")
-    private val requiredVideoFields = mapOf(
-        "direct" to emptyList(),
-        "iframe" to listOf("selector"),
-        "regex" to listOf("pattern"),
-        "webviewSniff" to emptyList(),
-    )
+    private val requiredVideoFields =
+        mapOf(
+            "direct" to emptyList(),
+            "iframe" to listOf("selector"),
+            "regex" to listOf("pattern"),
+            "webviewSniff" to emptyList(),
+        )
 
-    private val lenient = Json {
-        ignoreUnknownKeys = true
-        explicitNulls = false
-        encodeDefaults = false
-        isLenient = true
-    }
+    private val lenient =
+        Json {
+            ignoreUnknownKeys = true
+            explicitNulls = false
+            encodeDefaults = false
+            isLenient = true
+        }
 
     fun decodeAndValidate(text: String): Extension {
         val issues = validate(text)
         if (issues.isNotEmpty()) throw ExtensionValidationException(issues)
         return try {
             lenient.decodeFromString(Extension.serializer(), text)
-        } catch (e: Exception) {
-            throw ExtensionValidationException(listOf("structure: ${e.message}"))
+        } catch (e: kotlinx.serialization.SerializationException) {
+            throw ExtensionValidationException(listOf("structure: ${e.message}"), e)
+        } catch (e: IllegalArgumentException) {
+            throw ExtensionValidationException(listOf("structure: ${e.message}"), e)
         }
     }
 
@@ -51,28 +54,31 @@ object SchemaValidator {
         if (text.toByteArray(Charsets.UTF_8).size > MAX_JSON_BYTES) {
             issues.add("document: larger than ${MAX_JSON_BYTES / 1024} KB limit")
         }
-        val root = try {
-            Json.parseToJsonElement(text).jsonObject
-        } catch (e: Exception) {
-            return listOf("document: not a valid JSON object (${e.message})")
-        }
+        val root =
+            try {
+                Json.parseToJsonElement(text).jsonObject
+            } catch (e: Exception) {
+                return listOf("document: not a valid JSON object (${e.message})")
+            }
         checkRoot(root, issues)
         val steps = mutableSetOf<String>()
         root.forEach { (key, value) ->
             when {
                 key in listOf("search", "latest", "popular", "detail", "episodes") -> {
-                    val obj = value as? JsonObject ?: run {
-                        issues.add("$key: must be an object")
-                        return@forEach
-                    }
+                    val obj =
+                        value as? JsonObject ?: run {
+                            issues.add("$key: must be an object")
+                            return@forEach
+                        }
                     checkListStep(key, obj, issues)
                     steps.add(key)
                 }
                 key == "video" -> {
-                    val obj = value as? JsonObject ?: run {
-                        issues.add("video: must be an object")
-                        return@forEach
-                    }
+                    val obj =
+                        value as? JsonObject ?: run {
+                            issues.add("video: must be an object")
+                            return@forEach
+                        }
                     checkVideoStep(obj, issues)
                     steps.add(key)
                 }
@@ -83,11 +89,15 @@ object SchemaValidator {
         return issues
     }
 
-    private fun checkRoot(root: JsonObject, issues: MutableList<String>) {
+    private fun checkRoot(
+        root: JsonObject,
+        issues: MutableList<String>,
+    ) {
         when (val schemaVersion = root["schemaVersion"]) {
-            is JsonPrimitive -> if (schemaVersion.content != SUPPORTED_SCHEMA_VERSION.toString()) {
-                issues.add("schemaVersion: unsupported value ${schemaVersion.content}, expected $SUPPORTED_SCHEMA_VERSION")
-            }
+            is JsonPrimitive ->
+                if (schemaVersion.content != SUPPORTED_SCHEMA_VERSION.toString()) {
+                    issues.add("schemaVersion: unsupported value ${schemaVersion.content}, expected $SUPPORTED_SCHEMA_VERSION")
+                }
             else -> issues.add("schemaVersion: missing or not a number")
         }
         checkString(root, "id", issues) { value ->
@@ -97,9 +107,10 @@ object SchemaValidator {
             if (value.length > 100) "name: longer than 100 characters" else null
         }
         when (val version = root["version"]) {
-            is JsonPrimitive -> if (version.content.toIntOrNull()?.let { it > 0 } != true) {
-                issues.add("version: must be a positive integer")
-            }
+            is JsonPrimitive ->
+                if (version.content.toIntOrNull()?.let { it > 0 } != true) {
+                    issues.add("version: must be a positive integer")
+                }
             else -> issues.add("version: missing or not a number")
         }
         checkString(root, "lang", issues) { value ->
@@ -117,11 +128,17 @@ object SchemaValidator {
         if (headers != null && headers !is JsonObject) issues.add("headers: must be an object of name to value")
     }
 
-    private fun hostInvalid(url: String): Boolean = runCatching {
-        java.net.URI(url).host.isNullOrBlank()
-    }.getOrDefault(true)
+    private fun hostInvalid(url: String): Boolean =
+        runCatching {
+            java.net.URI(url).host.isNullOrBlank()
+        }.getOrDefault(true)
 
-    private fun checkString(root: JsonObject, key: String, issues: MutableList<String>, extra: (String) -> String?) {
+    private fun checkString(
+        root: JsonObject,
+        key: String,
+        issues: MutableList<String>,
+        extra: (String) -> String?,
+    ) {
         when (val value = root[key]) {
             is JsonPrimitive -> {
                 if (!value.isString) {
@@ -136,16 +153,22 @@ object SchemaValidator {
         }
     }
 
-    private fun checkListStep(stepName: String, step: JsonObject, issues: MutableList<String>) {
-        val request = step["request"] as? JsonObject ?: run {
-            issues.add("$stepName.request: missing")
-            return
-        }
+    private fun checkListStep(
+        stepName: String,
+        step: JsonObject,
+        issues: MutableList<String>,
+    ) {
+        val request =
+            step["request"] as? JsonObject ?: run {
+                issues.add("$stepName.request: missing")
+                return
+            }
         checkRequestUrl(stepName, request, issues)
-        val source = step["source"] as? JsonObject ?: run {
-            issues.add("$stepName.source: missing")
-            return
-        }
+        val source =
+            step["source"] as? JsonObject ?: run {
+                issues.add("$stepName.source: missing")
+                return
+            }
         val type = (source["type"] as? JsonPrimitive)?.content
         when (type) {
             "html" -> {
@@ -154,29 +177,33 @@ object SchemaValidator {
                     issues.add("$stepName.source: selector is required for an html source")
                 }
             }
-            "json" -> if ((source["path"] as? JsonPrimitive)?.content.isNullOrBlank() &&
-                (stepName in listSteps || stepName == "episodes")
-            ) {
-                issues.add("$stepName.source: path is required for a json source")
-            }
+            "json" ->
+                if ((source["path"] as? JsonPrimitive)?.content.isNullOrBlank() &&
+                    (stepName in listSteps || stepName == "episodes")
+                ) {
+                    issues.add("$stepName.source: path is required for a json source")
+                }
             else -> issues.add("$stepName.source: type must be html or json, got '$type'")
         }
-        val fields = step["fields"] as? JsonObject ?: run {
-            issues.add("$stepName.fields: missing")
-            return
-        }
-        fields.forEach { (fieldName, value) ->
-            val extraction = value as? JsonObject ?: run {
-                issues.add("$stepName.fields.$fieldName: must be an object")
-                return@forEach
+        val fields =
+            step["fields"] as? JsonObject ?: run {
+                issues.add("$stepName.fields: missing")
+                return
             }
+        fields.forEach { (fieldName, value) ->
+            val extraction =
+                value as? JsonObject ?: run {
+                    issues.add("$stepName.fields.$fieldName: must be an object")
+                    return@forEach
+                }
             checkExtraction(stepName, fieldName, extraction, type ?: "", issues)
         }
-        val required = when (stepName) {
-            "search", "latest", "popular" -> listOf("title", "url")
-            "episodes" -> listOf("url")
-            else -> emptyList()
-        }
+        val required =
+            when (stepName) {
+                "search", "latest", "popular" -> listOf("title", "url")
+                "episodes" -> listOf("url")
+                else -> emptyList()
+            }
         required.forEach { field ->
             if (fields[field] == null) issues.add("$stepName.fields: required field '$field' is missing")
         }
@@ -214,11 +241,15 @@ object SchemaValidator {
         if (group != null && group < 0) issues.add("$stepName.fields.$fieldName: regexGroup must be >= 0")
     }
 
-    private fun checkVideoStep(step: JsonObject, issues: MutableList<String>) {
-        val request = step["request"] as? JsonObject ?: run {
-            issues.add("video.request: missing")
-            return
-        }
+    private fun checkVideoStep(
+        step: JsonObject,
+        issues: MutableList<String>,
+    ) {
+        val request =
+            step["request"] as? JsonObject ?: run {
+                issues.add("video.request: missing")
+                return
+            }
         checkRequestUrl("video", request, issues)
         val strategy = (step["strategy"] as? JsonPrimitive)?.content
         if (strategy == null) {
@@ -261,7 +292,11 @@ object SchemaValidator {
         }
     }
 
-    private fun checkRequestUrl(stepName: String, request: JsonObject, issues: MutableList<String>) {
+    private fun checkRequestUrl(
+        stepName: String,
+        request: JsonObject,
+        issues: MutableList<String>,
+    ) {
         val url = (request["url"] as? JsonPrimitive)?.content
         if (url.isNullOrBlank()) issues.add("$stepName.request.url: missing")
         val method = (request["method"] as? JsonPrimitive)?.content

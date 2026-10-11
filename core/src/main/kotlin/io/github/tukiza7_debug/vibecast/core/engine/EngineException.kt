@@ -7,7 +7,10 @@ open class EngineException(
     cause: Throwable? = null,
 ) : Exception(buildMessage(step, field, reason), cause) {
     companion object {
-        private fun buildMessage(step: String, field: String?, reason: String) =
-            if (field == null) "[$step] $reason" else "[$step.$field] $reason"
+        private fun buildMessage(
+            step: String,
+            field: String?,
+            reason: String,
+        ) = if (field == null) "[$step] $reason" else "[$step.$field] $reason"
     }
 }
