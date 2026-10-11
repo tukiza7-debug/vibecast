@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.adblockDataStore by preferencesDataStore(name = "adblock_settings")
 
-class AdBlockSettings @Inject constructor(private val context: Context) {
+class AdBlockSettings @Inject constructor(@dagger.hilt.android.qualifiers.ApplicationContext private val context: Context) {
 
     private object Keys {
         val enabled = booleanPreferencesKey("enabled")

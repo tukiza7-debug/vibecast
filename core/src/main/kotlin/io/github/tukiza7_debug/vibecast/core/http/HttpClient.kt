@@ -21,7 +21,7 @@ interface HttpClient {
 }
 
 /** Lets the engine (and the analyzer) skip requests that ad rules block. */
-interface HostFilter {
+fun interface HostFilter {
     fun isBlocked(url: String): Boolean
 }
 

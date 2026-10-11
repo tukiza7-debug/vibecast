@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VibeCast</string>
+    <string name="notification_channel_playback">Playback</string>
+    <string name="extension_import_from_addonx">Added by AddOnX</string>
+</resources>
