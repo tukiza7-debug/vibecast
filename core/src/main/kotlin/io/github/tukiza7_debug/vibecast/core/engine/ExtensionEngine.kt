@@ -11,6 +11,7 @@ import io.github.tukiza7_debug.vibecast.core.model.Episode
 import io.github.tukiza7_debug.vibecast.core.model.Extension
 import io.github.tukiza7_debug.vibecast.core.model.FieldExtraction
 import io.github.tukiza7_debug.vibecast.core.model.ListStep
+import io.github.tukiza7_debug.vibecast.core.model.OptionalList
 import io.github.tukiza7_debug.vibecast.core.model.SearchItem
 import io.github.tukiza7_debug.vibecast.core.model.StreamRef
 import io.github.tukiza7_debug.vibecast.core.model.SubtitleTrack
@@ -56,6 +57,32 @@ class ExtensionEngine(
         val step = requireStep(extension.popular, "popular")
         return runItems(extension, step, "popular", mapOf("page" to page.toString()))
             .map { SearchItem(title = it.required("popular", "title"), url = it.required("popular", "url"), cover = it["cover"]) }
+    }
+
+    /**
+     * Runs the optional `latest` step without throwing when it is missing.
+     * Returns [OptionalList.NotPresent] when the extension does not define the
+     * step; a defined step that fails at network level still throws
+     * [EngineException] so callers can show a per-section error with retry.
+     */
+    fun latestOptional(
+        extension: Extension,
+        page: Int,
+    ): OptionalList {
+        val step = extension.latest ?: return OptionalList.NotPresent
+        return OptionalList.Present(latest(extension, page))
+    }
+
+    /**
+     * Runs the optional `popular` step without throwing when it is missing.
+     * See [latestOptional] for the missing-versus-failed contract.
+     */
+    fun popularOptional(
+        extension: Extension,
+        page: Int,
+    ): OptionalList {
+        val step = extension.popular ?: return OptionalList.NotPresent
+        return OptionalList.Present(popular(extension, page))
     }
 
     fun detail(
@@ -518,7 +545,12 @@ class ExtensionEngine(
     private fun requireStep(
         step: ListStep?,
         name: String,
-    ): ListStep = step ?: throw EngineException(name, null, "step is not defined in this extension")
+    ): ListStep =
+        step ?: throw EngineException(
+            name,
+            null,
+            "step is not defined in this extension (this step is optional - callers should check for it first)",
+        )
 
     private fun requirePattern(step: VideoStep): String =
         step.pattern ?: throw EngineException("video", "pattern", "regex strategy requires a pattern")
