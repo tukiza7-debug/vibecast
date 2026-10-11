@@ -1,0 +1,307 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      addonx: ${{ steps.filter.outputs.addonx }}
+      vibecast: ${{ steps.filter.outputs.vibecast }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            addonx:
+              - 'addonx/**'
+              - 'core/**'
+              - 'adblock/**'
+              - 'brand.properties'
+              - 'gradle/libs.versions.toml'
+              - 'scripts/**'
+            vibecast:
+              - 'vibecast/**'
+              - 'core/**'
+              - 'adblock/**'
+              - 'brand.properties'
+              - 'gradle/libs.versions.toml'
+              - 'scripts/**'
+
+  release-addonx:
+    needs: changes
+    if: needs.changes.outputs.addonx == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        run: |
+          output=$(bash scripts/compute-version.sh addonx)
+          echo "computed: $output"
+          if [ "$output" = "no-version-change" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "$output" | tr ' ' '\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if tag already exists
+        if: steps.version.outputs.skip == 'false'
+        id: tagcheck
+        run: |
+          if git ls-remote --tags origin "refs/tags/${{ steps.version.outputs.tag }}" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 17
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build signed release APKs
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          ./gradlew :addonx:assembleRelease \
+            -Paddonx.versionName=${{ steps.version.outputs.version }} \
+            -Paddonx.versionCode=${{ steps.version.outputs.code }}
+
+      - name: Verify signing and fingerprint
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        env:
+          EXPECTED_SHA256: ${{ vars.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          apk="addonx/build/outputs/apk/release/AddOnX-${{ steps.version.outputs.version }}-universal.apk"
+          [ -s "$apk" ] || { echo "missing APK: $apk"; exit 1; }
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          "$SDKROOT/build-tools/36.0.0/apksigner" verify --print-certs "$apk" > certs.txt
+          actual=$(sed -n 's/.*SHA-256 digest: //p' certs.txt | head -1 | tr -d ':')
+          expected=$(echo "$EXPECTED_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
+          echo "actual=$actual expected=$expected"
+          [ -n "$actual" ] || { echo "no certificate fingerprint found"; exit 1; }
+          [ "$actual" = "$expected" ] || { echo "certificate fingerprint mismatch"; exit 1; }
+
+      - name: Checksums
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        run: |
+          cd addonx/build/outputs/apk/release
+          sha256sum AddOnX-${{ steps.version.outputs.version }}-*.apk > SHA256SUMS.txt
+
+      - name: Tag
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Release notes
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        run: |
+          prev=$(git tag -l "addonx-v*" | grep -vF "${{ steps.version.outputs.tag }}" | sort -V | tail -1)
+          range="${prev:+$prev..}HEAD"
+          {
+            echo "Changes in AddOnX ${{ steps.version.outputs.version }}:"
+            git log --format='- %s' "$range" -- addonx core adblock 2>/dev/null | head -20
+            echo ""
+            echo "Certificate SHA-256: ${{ vars.EXPECTED_CERT_SHA256 }}"
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub release
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "AddOnX ${{ steps.version.outputs.version }}" \
+            --notes-file release-notes.md \
+            addonx/build/outputs/apk/release/AddOnX-${{ steps.version.outputs.version }}-*.apk \
+            addonx/build/outputs/apk/release/SHA256SUMS.txt
+
+      - name: Verify release assets
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sleep 5
+          gh api "repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.tag }}" > release.json
+          python3 - <<'PY'
+          import json, os, sys
+          data = json.load(open("release.json"))
+          assets = {a["name"]: a["size"] for a in data["assets"]}
+          version = "${{ steps.version.outputs.version }}"
+          expected = [f"AddOnX-{version}-{abi}.apk" for abi in
+                      ["universal", "arm64-v8a", "armeabi-v7a", "x86_64", "x86"]] + ["SHA256SUMS.txt"]
+          missing = [name for name in expected if assets.get(name, 0) <= 0]
+          if missing:
+              print("missing or empty assets:", missing)
+              sys.exit(1)
+          print("all release assets present:", ", ".join(f"{k} ({v} bytes)" for k, v in assets.items()))
+          PY
+
+  release-vibecast:
+    needs: changes
+    if: needs.changes.outputs.vibecast == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        run: |
+          output=$(bash scripts/compute-version.sh vibecast)
+          echo "computed: $output"
+          if [ "$output" = "no-version-change" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "$output" | tr ' ' '\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if tag already exists
+        if: steps.version.outputs.skip == 'false'
+        id: tagcheck
+        run: |
+          if git ls-remote --tags origin "refs/tags/${{ steps.version.outputs.tag }}" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 17
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build signed release APKs
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          ./gradlew :vibecast:assembleRelease \
+            -Pvibecast.versionName=${{ steps.version.outputs.version }} \
+            -Pvibecast.versionCode=${{ steps.version.outputs.code }}
+
+      - name: Verify signing and fingerprint
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        env:
+          EXPECTED_SHA256: ${{ vars.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          apk="vibecast/build/outputs/apk/release/VibeCast-${{ steps.version.outputs.version }}-universal.apk"
+          [ -s "$apk" ] || { echo "missing APK: $apk"; exit 1; }
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          "$SDKROOT/build-tools/36.0.0/apksigner" verify --print-certs "$apk" > certs.txt
+          actual=$(sed -n 's/.*SHA-256 digest: //p' certs.txt | head -1 | tr -d ':')
+          expected=$(echo "$EXPECTED_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
+          echo "actual=$actual expected=$expected"
+          [ -n "$actual" ] || { echo "no certificate fingerprint found"; exit 1; }
+          [ "$actual" = "$expected" ] || { echo "certificate fingerprint mismatch"; exit 1; }
+
+      - name: Checksums
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        run: |
+          cd vibecast/build/outputs/apk/release
+          sha256sum VibeCast-${{ steps.version.outputs.version }}-*.apk > SHA256SUMS.txt
+
+      - name: Tag
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Release notes
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        run: |
+          prev=$(git tag -l "vibecast-v*" | grep -vF "${{ steps.version.outputs.tag }}" | sort -V | tail -1)
+          range="${prev:+$prev..}HEAD"
+          {
+            echo "Changes in VibeCast ${{ steps.version.outputs.version }}:"
+            git log --format='- %s' "$range" -- vibecast core adblock 2>/dev/null | head -20
+            echo ""
+            echo "Certificate SHA-256: ${{ vars.EXPECTED_CERT_SHA256 }}"
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub release
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "VibeCast ${{ steps.version.outputs.version }}" \
+            --notes-file release-notes.md \
+            vibecast/build/outputs/apk/release/VibeCast-${{ steps.version.outputs.version }}-*.apk \
+            vibecast/build/outputs/apk/release/SHA256SUMS.txt
+
+      - name: Verify release assets
+        if: steps.version.outputs.skip == 'false' && steps.tagcheck.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sleep 5
+          gh api "repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.tag }}" > release.json
+          python3 - <<'PY'
+          import json, sys
+          data = json.load(open("release.json"))
+          assets = {a["name"]: a["size"] for a in data["assets"]}
+          version = "${{ steps.version.outputs.version }}"
+          expected = [f"VibeCast-{version}-{abi}.apk" for abi in
+                      ["universal", "arm64-v8a", "armeabi-v7a", "x86_64", "x86"]] + ["SHA256SUMS.txt"]
+          missing = [name for name in expected if assets.get(name, 0) <= 0]
+          if missing:
+              print("missing or empty assets:", missing)
+              sys.exit(1)
+          print("all release assets present:", ", ".join(f"{k} ({v} bytes)" for k, v in assets.items()))
+          PY

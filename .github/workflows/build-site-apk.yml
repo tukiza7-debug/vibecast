@@ -1,0 +1,167 @@
+name: Build site APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      extension_code:
+        description: "Extension code (unix1:... or gc1:...)"
+        required: false
+        type: string
+      extension_url:
+        description: "Direct https URL to an extension JSON file"
+        required: false
+        type: string
+      app_name:
+        description: "Display name for the generated app (1-30 chars)"
+        required: true
+        type: string
+      package_id:
+        description: "Application id (reverse domain; must stay stable to update in place)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-apk-${{ github.event.inputs.package_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      source: ${{ steps.validate.outputs.source }}
+      safe_app_name: ${{ steps.validate.outputs.safe_app_name }}
+      safe_package_id: ${{ steps.validate.outputs.safe_package_id }}
+    steps:
+      - name: Validate inputs
+        id: validate
+        env:
+          CODE: ${{ github.event.inputs.extension_code }}
+          URL: ${{ github.event.inputs.extension_url }}
+        run: |
+          set -euo pipefail
+          name="${{ github.event.inputs.app_name }}"
+          package="${{ github.event.inputs.package_id }}"
+
+          echo "$name" | grep -qE '^[A-Za-z0-9][A-Za-z0-9 _-]{0,29}$' || { echo "app_name: 1-30 chars (letters, digits, space, dash)"; exit 1; }
+          echo "$package" | grep -qE '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$' || { echo "package_id: invalid reverse-domain id"; exit 1; }
+          safe_name=$(echo "$name" | tr -c 'A-Za-z0-9' '-' | sed 's/--*/-/g' | cut -c1-30)
+
+          if [ -n "$URL" ]; then
+            echo "$URL" | grep -qE '^https://' || { echo "extension_url must be https"; exit 1; }
+            source="$URL"
+          elif [ -n "$CODE" ]; then
+            case "$CODE" in
+              unix1:*|gc1:*) source="$CODE" ;;
+              *) echo "extension_code must start with unix1: or gc1:"; exit 1 ;;
+            esac
+          else
+            echo "provide extension_code or extension_url"; exit 1
+          fi
+
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "safe_app_name=$safe_name" >> "$GITHUB_OUTPUT"
+          echo "safe_package_id=$(echo "$package" | tr '.' '-')" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve bundled extension
+        id: resolve
+        env:
+          SOURCE: ${{ needs.validate.outputs.source }}
+        run: |
+          set -euo pipefail
+          b64=$(python3 scripts/resolve-extension.py "$SOURCE")
+          echo "length: ${#b64}"
+          echo "b64=$b64" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed site APK
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          ./gradlew :vibecast:assembleRelease \
+            -PsitePackageId="${{ github.event.inputs.package_id }}" \
+            -PsiteAppName="${{ github.event.inputs.app_name }}" \
+            -PbundledExtensionJsonB64="${{ steps.resolve.outputs.b64 }}"
+
+      - name: Verify signing and fingerprint
+        env:
+          EXPECTED_SHA256: ${{ vars.EXPECTED_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          apk="vibecast/build/outputs/apk/release/${{ github.event.inputs.app_name }}-1.0.0-universal.apk"
+          [ -s "$apk" ] || { echo "missing APK: $apk"; exit 1; }
+          "$SDKROOT/build-tools/36.0.0/apksigner" verify --print-certs "$apk" > certs.txt
+          actual=$(sed -n 's/.*SHA-256 digest: //p' certs.txt | head -1 | tr -d ':')
+          expected=$(echo "$EXPECTED_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
+          [ "$actual" = "$expected" ] || { echo "certificate fingerprint mismatch"; exit 1; }
+
+      - name: Checksums
+        run: |
+          cd vibecast/build/outputs/apk/release
+          sha256sum "${{ github.event.inputs.app_name }}"-*.apk > SHA256SUMS.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ needs.validate.outputs.safe_app_name }}-site-apk"
+          path: |
+            vibecast/build/outputs/apk/release/*.apk
+            vibecast/build/outputs/apk/release/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Create site release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="site-${{ needs.validate.outputs.safe_package_id }}-$(date -u +%Y%m%d%H%M%S)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          cd vibecast/build/outputs/apk/release
+          gh release create "$tag" \
+            --repo "${{ github.repository }}" \
+            --title "Site APK: ${{ github.event.inputs.app_name }}" \
+            --notes "Standalone VibeCast build for package ${{ github.event.inputs.package_id }} with a bundled extension. Same package id always updates in place. Certificate SHA-256: ${{ vars.EXPECTED_CERT_SHA256 }}" \
+            --prerelease \
+            "${{ github.event.inputs.app_name }}"-*.apk SHA256SUMS.txt
+
+      - name: Verify release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/releases/tags/${{ steps.release.outputs.tag }}" > release.json
+          python3 -c "
+import json, sys
+data = json.load(open('release.json'))
+assets = {a['name']: a['size'] for a in data['assets']}
+apks = [n for n in assets if n.endswith('.apk')]
+if not apks or any(assets[n] <= 0 for n in apks):
+    print('missing or empty APK assets'); sys.exit(1)
+print('site release assets:', ', '.join(assets))
+"
