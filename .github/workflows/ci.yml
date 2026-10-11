@@ -43,3 +43,16 @@ jobs:
             **/build/test-results/**
           if-no-files-found: ignore
           retention-days: 7
+
+  sample-extension:
+    # Live verification of the sample extension's Internet Archive endpoints.
+    # Runs on GitHub runners because they have unrestricted network access.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify sample extension endpoints live
+        run: python3 scripts/verify-sample-extension.py
