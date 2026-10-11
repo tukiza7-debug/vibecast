@@ -1,0 +1,5 @@
+[Adblock Plus 2.0]
+! Fixture list used by unit tests only
+/ads/badge.gif
+||blocked-fixture.test^
+##.ad-slot
