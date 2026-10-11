@@ -75,6 +75,15 @@ class BuildStore
 
         suspend fun setTheme(value: String) = edit { it[Keys.theme] = value }
 
+        /** Clears export defaults and theme, used by Settings > Clear local data. */
+        suspend fun reset() =
+            edit {
+                it.remove(Keys.repoOwner)
+                it.remove(Keys.repoName)
+                it.remove(Keys.publishPath)
+                it.remove(Keys.theme)
+            }
+
         private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
             context.buildDataStore.edit { block(it) }
         }

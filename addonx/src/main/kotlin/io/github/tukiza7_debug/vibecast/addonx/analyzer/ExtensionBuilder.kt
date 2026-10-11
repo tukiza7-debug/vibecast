@@ -89,7 +89,14 @@ object ExtensionBuilder {
                     step.itemSelector?.let { put("selector", it) }
                     step.jsonPath?.let { put("path", it) }
                 },
-            "fields" to step.fields.mapValues { (_, field) -> fieldJson(field) },
+            // Fields without any extraction directive would serialize as invalid empty
+            // objects; omit them instead of inventing values.
+            "fields" to
+                step.fields
+                    .filterValues { field ->
+                        field.selector != null || field.path != null || field.template != null || field.regex != null
+                    }
+                    .mapValues { (_, field) -> fieldJson(field) },
         )
 
     private fun fieldJson(field: FieldDraft): Map<String, Any?> =

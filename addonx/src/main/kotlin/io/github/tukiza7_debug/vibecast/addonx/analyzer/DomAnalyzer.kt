@@ -34,14 +34,26 @@ object DomAnalyzer {
     ): Analysis {
         val doc = Jsoup.parse(html, baseUrl)
         val proposals = mutableListOf<Proposal>()
-        doc.body().select("*").forEach { container ->
+        // Navigation, headers, footers and asides are never item containers; skipping
+        // them removes the most common false positives on listing pages.
+        val containers =
+            doc.body().select("*").filter { element ->
+                val tag = element.tagName().lowercase()
+                val classes = element.classNames().joinToString(" ").lowercase()
+                val role = element.attr("role").lowercase()
+                tag !in setOf("nav", "header", "footer", "aside") &&
+                    role !in setOf("navigation", "banner", "contentinfo") &&
+                    !classes.contains("nav") && !classes.contains("footer") && !classes.contains("menu") &&
+                    !classes.contains("sidebar") && !classes.contains("breadcrumb")
+            }
+        containers.forEach { container ->
             val children = container.children()
             if (children.size < 3) return@forEach
             val groups = children.groupBy { CssSelectorBuilder.elementSignature(it) }
             groups.forEach { (signature, group) ->
                 if (group.size < 3) return@forEach
                 val first = group.first()
-                if (first.tagName() in setOf("script", "style", "br", "img", "input")) return@forEach
+                if (first.tagName() in setOf("script", "style", "br", "img", "input", "option")) return@forEach
                 val titleSelector = pickTitleSelector(first)
                 val linkSelector = pickLinkSelector(first) ?: return@forEach
                 val coverSelector = pickCoverSelector(first)
@@ -49,7 +61,7 @@ object DomAnalyzer {
                 val confidence =
                     when {
                         group.size >= 8 && titleSelector != null && coverSelector != null -> Confidence.HIGH
-                        group.size >= 5 -> Confidence.MEDIUM
+                        group.size >= 5 && titleSelector != null -> Confidence.MEDIUM
                         else -> Confidence.LOW
                     }
                 proposals +=
@@ -67,7 +79,8 @@ object DomAnalyzer {
         val best =
             proposals
                 .sortedWith(
-                    compareByDescending<Proposal> { it.itemCount }
+                    compareByDescending<Proposal> { it.confidence }
+                        .thenByDescending { it.itemCount }
                         .thenByDescending { (it.titleSelector != null).compareTo(false) },
                 )
                 .distinctBy { it.itemSelector }
@@ -146,16 +159,25 @@ object DomAnalyzer {
         return chain.reversed().joinToString(" > ")
     }
 
-    private fun pickTitleSelector(item: Element): String? =
-        when {
-            item.selectFirst("h1,h2,h3,h4") != null -> item.selectFirst("h1,h2,h3,h4")!!.tagName()
-            item.selectFirst("[class*=title i]") != null -> classSelector(item.selectFirst("[class*=title i]")!!)
-            else -> null
-        }
+    private fun pickTitleSelector(item: Element): String? {
+        item.selectFirst("h1,h2,h3,h4")?.let { return item.selectFirst("h1,h2,h3,h4")!!.tagName() }
+        item.selectFirst("[class*=title i]")?.let { return classSelector(it) }
+        // Many cards put the title in the link text itself.
+        val link = item.selectFirst("a[href]")
+        if (link != null && link.text().length in 4..120) return "a[href]"
+        return null
+    }
 
     private fun pickLinkSelector(item: Element): String? {
-        val link = item.selectFirst("a[href]") ?: return null
-        return if (link == item) "a[href]" else "a[href]"
+        val links = item.select("a[href]")
+        // Prefer links that point at detail pages over pure anchors or external jumps.
+        val detailLink =
+            links.firstOrNull { link ->
+                val href = link.attr("href")
+                href.isNotEmpty() && !href.startsWith("#") && !href.startsWith("javascript") &&
+                    !href.startsWith("mailto") && !href.startsWith("tel")
+            }
+        return if (detailLink != null) "a[href]" else null
     }
 
     private fun pickCoverSelector(item: Element): String? {
@@ -196,4 +218,18 @@ object DomAnalyzer {
         url: String,
         baseUrl: String,
     ): String = UrlResolver.absolutize(url, baseUrl)
+
+    /**
+     * True when the page HTML is almost certainly a client-rendered shell: little to
+     * no text, no list structure, and heavy script weight. Used to explain why no
+     * proposals were found instead of leaving the user guessing.
+     */
+    fun looksLikeSinglePageApp(html: String): Boolean {
+        val doc = Jsoup.parse(html)
+        val textLength = doc.body()?.text()?.length ?: 0
+        val anchors = doc.body()?.select("a[href]")?.size ?: 0
+        val scripts = doc.select("script[src]").size
+        val rootApp = doc.body()?.select("#root, #app, #__next")?.isNotEmpty() == true
+        return (textLength < 400 && anchors < 6) || (rootApp && anchors < 6 && scripts >= 2)
+    }
 }
