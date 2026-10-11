@@ -176,7 +176,12 @@ class UpdateRepository
             val apkInfo =
                 pm.getPackageArchiveInfo(apk.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES)
                     ?: throw java.io.IOException("downloaded APK is not readable")
-            val apkCerts = apkInfo.signingInfo?.apkContentsSigners ?: throw java.io.IOException("downloaded APK is unsigned")
+            val apkCerts = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            apkInfo.signingInfo?.apkContentsSigners ?: throw java.io.IOException("downloaded APK is unsigned")
+        } else {
+            @Suppress("DEPRECATION")
+            apkInfo.signatures ?: throw java.io.IOException("downloaded APK is unsigned")
+        }
             val installedDigests = installedCerts.map { sha256OfBytes(it.toByteArray()) }.toSet()
             val apkDigests = apkCerts.map { sha256OfBytes(it.toByteArray()) }.toSet()
             if (installedDigests.intersect(apkDigests).isEmpty()) {

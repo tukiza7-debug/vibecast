@@ -9,6 +9,7 @@ import androidx.media3.common.Tracks
  * Pure quality selection logic: Auto clears video overrides, a specific selection
  * pins one track of its group. Unit tested on the JVM.
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 object QualitySelectorLogic {
     data class VideoOption(
         val group: Tracks.Group,

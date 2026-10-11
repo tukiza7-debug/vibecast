@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** Holds the ExoPlayer instance and the media session; UI binds through MediaController. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
     @Inject lateinit var okHttpClient: okhttp3.OkHttpClient
@@ -118,6 +119,7 @@ class PlaybackService : MediaSessionService() {
 }
 
 /** Applies per-stream headers to every request the player makes for that stream. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class HeaderProvidingDataSourceFactory(
     private val upstream: OkHttpDataSource.Factory,
     private val registry: HeadersRegistry,
@@ -125,6 +127,7 @@ class HeaderProvidingDataSourceFactory(
     override fun createDataSource(): DataSource = HeaderDataSource(upstream.createDataSource(), registry)
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 private class HeaderDataSource(
     private val wrapped: DataSource,
     private val registry: HeadersRegistry,

@@ -70,6 +70,7 @@ class PlayerViewModel
         val playerConnection: PlayerConnection,
     ) : ViewModel()
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 fun PlayerScreen(
     onFinish: () -> Unit,

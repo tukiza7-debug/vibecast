@@ -86,7 +86,7 @@ class AnalyzerViewModel
 
         private var lastWebView: WebView? = null
 
-        fun pickBridge(webView: WebView): Any = bridgeFactory.create(this)
+        fun pickBridge(webView: WebView): PickBridge = bridgeFactory.create(this)
 
         fun currentAssignment(): String? = null
 
@@ -325,22 +325,18 @@ class AnalyzerViewModel
     }
 
 /** The JS bridge object injected into the page as window.VibePick. */
-@SuppressLint("JavascriptInterface")
-class PickBridgeFactory
-    @Inject
-    constructor() {
-        fun create(viewModel: AnalyzerViewModel): Any =
-            object {
-                @android.webkit.JavascriptInterface
-                fun pick(
-                    selector: String,
-                    outerHtml: String,
-                    text: String,
-                ) {
-                    viewModel.onPicked(selector, outerHtml, text)
-                }
-            }
+class PickBridge(private val viewModel: AnalyzerViewModel) {
+
+    @android.webkit.JavascriptInterface
+    fun pick(selector: String, outerHtml: String, text: String) {
+        viewModel.onPicked(selector, outerHtml, text)
     }
+}
+
+class PickBridgeFactory @Inject constructor() {
+
+    fun create(viewModel: AnalyzerViewModel): PickBridge = PickBridge(viewModel)
+}
 
 /** Inserts the extension into a same-device VibeCast through its signature-protected provider. */
 object VibeCastInstaller {

@@ -123,6 +123,9 @@ android {
 
     lint {
         abortOnError = true
+        // The verification gate runs `lint` explicitly; lintVital duplicates that
+        // work inside assembleRelease and doubles the memory needed for R8.
+        checkReleaseBuilds = false
         disable += setOf("MissingTranslation", "GoogleAppIndexingWarning", "UnknownNullness")
     }
 

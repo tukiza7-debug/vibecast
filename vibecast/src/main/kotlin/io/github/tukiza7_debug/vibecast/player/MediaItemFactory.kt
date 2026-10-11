@@ -12,6 +12,7 @@ import io.github.tukiza7_debug.vibecast.core.model.StreamRef
  * Builds Media3 MediaItems from extension stream references. MIME is set explicitly
  * whenever it is known or inferable, so HLS/DASH work even on extensionless URLs.
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 object MediaItemFactory {
     fun media3MimeType(mime: String?): String? =
         when (mime?.lowercase()) {

@@ -14,7 +14,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
-import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -87,7 +86,7 @@ class GitHubApi
                 val body = json.parseToJsonElement(response.bodyText()).jsonObject
                 val sha = body.string("sha") ?: return@withContext null
                 val content = body.string("content") ?: return@withContext null
-                sha to String(Base64.getMimeDecoder().decode(content), Charsets.UTF_8)
+                sha to String(android.util.Base64.decode(content, android.util.Base64.DEFAULT), Charsets.UTF_8)
             }
 
         private suspend fun putFile(
@@ -101,7 +100,7 @@ class GitHubApi
             val payload =
                 buildJsonObject {
                     put("message", message)
-                    put("content", Base64.getEncoder().encodeToString(content.toByteArray(Charsets.UTF_8)))
+                    put("content", android.util.Base64.encodeToString(content.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP))
                     runCatching { getFile(token, owner, repo, path) }.getOrNull()?.let { put("sha", it.first) }
                 }
             val response =

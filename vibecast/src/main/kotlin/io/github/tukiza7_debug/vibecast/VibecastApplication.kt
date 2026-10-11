@@ -12,7 +12,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.util.Base64
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -45,7 +44,7 @@ class VibecastApplication : Application(), Configuration.Provider {
         if (encoded.isBlank()) return
         val json =
             try {
-                String(Base64.getMimeDecoder().decode(encoded), Charsets.UTF_8)
+                String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT), Charsets.UTF_8)
             } catch (_: IllegalArgumentException) {
                 return
             }
