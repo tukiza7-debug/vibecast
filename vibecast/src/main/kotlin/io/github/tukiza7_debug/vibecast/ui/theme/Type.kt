@@ -11,12 +11,26 @@ import androidx.compose.ui.unit.sp
 
 val VibeCastTypography =
     Typography(
+        headlineLarge =
+            TextStyle(
+                fontFamily = FontFamily.Default,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 30.sp,
+                letterSpacing = (-0.4).sp,
+            ),
         headlineMedium =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 26.sp,
                 letterSpacing = (-0.3).sp,
+            ),
+        headlineSmall =
+            TextStyle(
+                fontFamily = FontFamily.Default,
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                letterSpacing = (-0.2).sp,
             ),
         titleLarge =
             TextStyle(
@@ -31,12 +45,26 @@ val VibeCastTypography =
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp,
             ),
+        bodyLarge =
+            TextStyle(
+                fontFamily = FontFamily.Default,
+                fontWeight = FontWeight.Normal,
+                fontSize = 16.sp,
+                lineHeight = 24.sp,
+            ),
         bodyMedium =
             TextStyle(
                 fontFamily = FontFamily.Default,
                 fontWeight = FontWeight.Normal,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
+            ),
+        labelLarge =
+            TextStyle(
+                fontFamily = FontFamily.Default,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                letterSpacing = 0.2.sp,
             ),
         labelSmall =
             TextStyle(
@@ -49,7 +77,9 @@ val VibeCastTypography =
 
 val VibeCastShapes =
     Shapes(
+        extraSmall = RoundedCornerShape(6.dp),
         small = RoundedCornerShape(8.dp),
         medium = RoundedCornerShape(14.dp),
         large = RoundedCornerShape(22.dp),
+        extraLarge = RoundedCornerShape(28.dp),
     )

@@ -11,12 +11,9 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,6 +36,8 @@ import io.github.tukiza7_debug.vibecast.ui.home.HomeScreen
 import io.github.tukiza7_debug.vibecast.ui.importsheet.ImportPromptController
 import io.github.tukiza7_debug.vibecast.ui.importsheet.ImportSheetHost
 import io.github.tukiza7_debug.vibecast.ui.library.LibraryScreen
+import io.github.tukiza7_debug.vibecast.ui.nav.GlassNavBar
+import io.github.tukiza7_debug.vibecast.ui.nav.GlassNavItem
 import io.github.tukiza7_debug.vibecast.ui.nav.Routes
 import io.github.tukiza7_debug.vibecast.ui.search.SearchScreen
 import io.github.tukiza7_debug.vibecast.ui.settings.SettingsScreen
@@ -101,28 +100,29 @@ fun AppScaffold(importController: ImportPromptController) {
     val snackbarHostState = remember { SnackbarHostState() }
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val bottomRoutes = listOf(Routes.HOME, Routes.SEARCH, Routes.LIBRARY, Routes.EXTENSIONS)
+    val navItems =
+        listOf(
+            GlassNavItem(Routes.HOME, Icons.Filled.Home, "Home"),
+            GlassNavItem(Routes.SEARCH, Icons.Filled.Explore, "Search"),
+            GlassNavItem(Routes.LIBRARY, Icons.Filled.Favorite, "Library"),
+            GlassNavItem(Routes.EXTENSIONS, Icons.Filled.Extension, "Extensions"),
+        )
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            if (currentRoute in bottomRoutes) {
-                NavigationBar {
-                    bottomRoutes.forEach { route ->
-                        NavigationBarItem(
-                            selected = currentRoute == route,
-                            onClick = {
-                                navController.navigate(route) {
-                                    popUpTo(Routes.HOME) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(bottomIcon(route), contentDescription = route) },
-                            label = { Text(route.replaceFirstChar { it.uppercase() }) },
-                        )
-                    }
-                }
+            if (currentRoute in navItems.map { it.route }) {
+                GlassNavBar(
+                    items = navItems,
+                    selectedRoute = currentRoute,
+                    onSelect = { route ->
+                        navController.navigate(route) {
+                            popUpTo(Routes.HOME) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
         },
     ) { padding ->
@@ -146,7 +146,10 @@ fun AppScaffold(importController: ImportPromptController) {
                 )
             }
             composable(Routes.LIBRARY) {
-                LibraryScreen(onOpenDetail = { navController.navigate(it) })
+                LibraryScreen(
+                    onOpenDetail = { navController.navigate(it) },
+                    onOpenHome = { navController.navigate(Routes.HOME) { launchSingleTop = true } },
+                )
             }
             composable(Routes.EXTENSIONS) {
                 ExtensionsScreen(snackbarHostState = snackbarHostState)
@@ -154,7 +157,7 @@ fun AppScaffold(importController: ImportPromptController) {
             composable(Routes.SETTINGS) {
                 SettingsScreen()
             }
-            composable("detail/{extensionId}/{url}/{title}?cover={cover}") { entry ->
+            composable("detail/{extensionId}/{url}/{title}?cover={cover}&autoplay={autoplay}") { entry ->
                 val args = entry.arguments
                 if (args == null) {
                     return@composable
@@ -164,6 +167,7 @@ fun AppScaffold(importController: ImportPromptController) {
                     itemUrl = args.getString("url").orEmpty(),
                     title = args.getString("title").orEmpty(),
                     cover = args.getString("cover")?.takeIf { it.isNotEmpty() },
+                    autoplay = args.getBoolean("autoplay", false),
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -197,10 +201,3 @@ private fun ExtensionsUndoHost(
     }
 }
 
-private fun bottomIcon(route: String) =
-    when (route) {
-        Routes.HOME -> Icons.Filled.Home
-        Routes.SEARCH -> Icons.Filled.Explore
-        Routes.LIBRARY -> Icons.Filled.Favorite
-        else -> Icons.Filled.Extension
-    }

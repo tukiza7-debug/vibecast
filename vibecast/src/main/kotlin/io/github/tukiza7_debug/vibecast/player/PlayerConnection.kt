@@ -32,6 +32,8 @@ data class PlaybackMeta(
     val cover: String?,
     val baseUrl: String,
     val quality: String?,
+    /** Item page URL for detail navigation; blank when unknown. */
+    val itemUrl: String = "",
 )
 
 interface StreamRefresher {
@@ -73,6 +75,8 @@ class PlayerConnection
             val extensionId: String,
             val cover: String?,
             val baseUrl: String,
+            /** Item page URL kept for Continue Watching routing. */
+            val itemUrl: String = "",
         )
 
         private val controllerFuture = MutableStateFlow<MediaController?>(null)
@@ -205,6 +209,7 @@ class PlayerConnection
                         cover = item.cover,
                         baseUrl = item.baseUrl,
                         quality = item.streamRef.quality,
+                        itemUrl = item.itemUrl,
                     ),
                 )
                 headersRegistry.register(item.mediaId, item.streamRef.url, item.baseUrl, item.streamRef.headers)

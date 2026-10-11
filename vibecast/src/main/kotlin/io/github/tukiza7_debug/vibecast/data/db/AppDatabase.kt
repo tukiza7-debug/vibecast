@@ -41,6 +41,9 @@ data class HistoryEntity(
     val extensionId: String,
     val title: String,
     val url: String,
+    /** The item page URL (episode lists live here); blank when unknown. Kept
+     *  separate from [url] so stream refresh keeps using the episode URL. */
+    val itemUrl: String,
     val cover: String?,
     val positionMs: Long,
     val durationMs: Long,
@@ -100,7 +103,7 @@ interface HistoryDao {
 
 @Database(
     entities = [ExtensionEntity::class, FavoriteEntity::class, HistoryEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -109,4 +112,15 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun favoritesDao(): FavoritesDao
 
     abstract fun historyDao(): HistoryDao
+
+    companion object {
+        /** v2 adds history.itemUrl so Continue Watching opens the item page,
+         *  not the raw episode URL. */
+        val MIGRATION_1_2 =
+            object : androidx.room.migration.Migration(1, 2) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE history ADD COLUMN itemUrl TEXT NOT NULL DEFAULT ''")
+                }
+            }
+    }
 }

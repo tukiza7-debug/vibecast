@@ -41,6 +41,7 @@ class HistoryRepository
                     extensionId = meta.extensionId,
                     title = meta.title,
                     url = meta.mediaId,
+                    itemUrl = meta.itemUrl,
                     cover = meta.cover,
                     positionMs = positionMs,
                     durationMs = durationMs,

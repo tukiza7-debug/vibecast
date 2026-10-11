@@ -87,7 +87,9 @@ object AppModule {
             context,
             io.github.tukiza7_debug.vibecast.data.db.AppDatabase::class.java,
             "vibecast.db",
-        ).build()
+        )
+            .addMigrations(io.github.tukiza7_debug.vibecast.data.db.AppDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides
     fun provideExtensionDao(
