@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "name": "Fixture collection",
+  "extensions": [
+    { "file": "extensions/one.json", "sha256": "deadbeef" },
+    { "file": "extensions/two.json" }
+  ]
+}

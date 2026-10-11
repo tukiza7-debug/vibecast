@@ -1,0 +1,10 @@
+{
+  "response": {
+    "numFound": 3,
+    "docs": [
+      { "identifier": "alpha-night", "title": "Alpha Night" },
+      { "identifier": "beta-dawn", "title": "Beta Dawn" },
+      { "identifier": "gamma-dusk", "title": "Gamma Dusk" }
+    ]
+  }
+}

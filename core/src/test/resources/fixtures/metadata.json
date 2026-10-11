@@ -1,0 +1,13 @@
+{
+  "metadata": {
+    "identifier": "alpha-night",
+    "title": "Alpha Night",
+    "description": "A public-domain noir from the fixture archive."
+  },
+  "files": [
+    { "name": "alpha-night.mp4", "format": "MPEG4", "size": "1024" },
+    { "name": "alpha-night.ogv", "format": "Ogg Video", "size": "512" },
+    { "name": "alpha-night.txt", "format": "Text", "size": "64" },
+    { "name": "extras.mp4", "format": "MPEG4", "size": "2048" }
+  ]
+}

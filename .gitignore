@@ -1,0 +1,19 @@
+# Gradle
+.gradle/
+build/
+local.properties
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+
+# Secrets and signing material - never commit
+*.jks
+*.keystore
+keystore.properties
+.env
+.github-token
+
+# OS
+.DS_Store

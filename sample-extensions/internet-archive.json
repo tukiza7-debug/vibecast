@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "org.archive.publicdomain",
+  "name": "Internet Archive Public Domain",
+  "version": 1,
+  "lang": "en",
+  "baseUrl": "https://archive.org",
+  "headers": {
+    "User-Agent": "VibeCast-Extension/1.0 (public domain films; +https://github.com/tukiza7-debug/vibecast)"
+  },
+  "search": {
+    "request": {
+      "url": "https://archive.org/advancedsearch.php?q={query}+AND+mediatype%3Amovies&fl%5B%5D=identifier&fl%5B%5D=title&rows=20&page={page}&output=json"
+    },
+    "source": { "type": "json", "path": "$.response.docs[*]" },
+    "fields": {
+      "title": { "path": "$.title" },
+      "cover": { "path": "$.identifier", "template": "https://archive.org/services/img/{value}" },
+      "url": { "path": "$.identifier", "template": "https://archive.org/metadata/{value}" }
+    }
+  },
+  "latest": {
+    "request": {
+      "url": "https://archive.org/advancedsearch.php?q=collection%3Afeature_films+AND+mediatype%3Amovies&fl%5B%5D=identifier&fl%5B%5D=title&sort%5B%5D=addeddate&sort%5B%5D=desc&rows=20&page={page}&output=json"
+    },
+    "source": { "type": "json", "path": "$.response.docs[*]" },
+    "fields": {
+      "title": { "path": "$.title" },
+      "cover": { "path": "$.identifier", "template": "https://archive.org/services/img/{value}" },
+      "url": { "path": "$.identifier", "template": "https://archive.org/metadata/{value}" }
+    }
+  },
+  "detail": {
+    "request": { "url": "{url}" },
+    "source": { "type": "json" },
+    "fields": {
+      "title": { "path": "$.metadata.title" },
+      "synopsis": { "path": "$.metadata.description" },
+      "cover": { "rootPath": "$.metadata.identifier", "template": "https://archive.org/services/img/{value}" }
+    }
+  },
+  "episodes": {
+    "request": { "url": "{url}" },
+    "source": {
+      "type": "json",
+      "path": "$.files[*]",
+      "filterField": "format",
+      "filterEquals": "MPEG4"
+    },
+    "fields": {
+      "name": { "path": "$.name" },
+      "url": {
+        "path": "$.name",
+        "template": "https://archive.org/download/{value2}/{value}",
+        "value2": { "rootPath": "$.metadata.identifier" }
+      }
+    }
+  },
+  "video": {
+    "request": { "url": "{url}" },
+    "strategy": "direct",
+    "timeoutMs": 15000,
+    "quality": { "template": "Original" }
+  }
+}
