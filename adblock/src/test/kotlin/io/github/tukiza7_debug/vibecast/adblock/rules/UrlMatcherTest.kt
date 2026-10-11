@@ -121,4 +121,34 @@ class UrlMatcherTest {
         assertEquals("b.com", UrlMatcher.nextSuffix("a.b.com"))
         assertEquals(null, UrlMatcher.nextSuffix("com"))
     }
+
+    @Test
+    fun `important rule outranks exception`() {
+        val m =
+            matcher(
+                "||ads.example.com^" + "\$important",
+                "@@||ads.example.com^",
+            )
+        assertTrue(m.decide(req("https://ads.example.com/x.js", "news.com")) is Decision.Block)
+    }
+
+    @Test
+    fun `without important the exception wins`() {
+        val m =
+            matcher(
+                "||ads.example.com^",
+                "@@||ads.example.com^",
+            )
+        assertTrue(m.decide(req("https://ads.example.com/x.js", "news.com")) is Decision.AllowException)
+    }
+
+    @Test
+    fun `important is combined with other options`() {
+        val m =
+            matcher(
+                "||tracker.net^" + "\$script,important",
+            )
+        assertTrue(m.decide(req("https://tracker.net/t.js", "news.com", ResourceType.SCRIPT)) is Decision.Block)
+        assertTrue(m.decide(req("https://tracker.net/t.png", "news.com", ResourceType.IMAGE)) is Decision.Allow)
+    }
 }

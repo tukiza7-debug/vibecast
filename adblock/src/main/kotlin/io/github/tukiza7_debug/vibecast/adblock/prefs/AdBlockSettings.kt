@@ -25,6 +25,7 @@ class AdBlockSettings
             val easyPrivacy = booleanPreferencesKey("easyprivacy_enabled")
             val customRules = stringPreferencesKey("custom_rules")
             val disabledHosts = stringSetPreferencesKey("disabled_hosts")
+            val bypassHosts = stringSetPreferencesKey("bypass_hosts")
             val blockedTotal = longPreferencesKey("blocked_total")
             val easyListEtag = stringPreferencesKey("easylist_etag")
             val easyPrivacyEtag = stringPreferencesKey("easyprivacy_etag")
@@ -35,6 +36,7 @@ class AdBlockSettings
         val easyPrivacyEnabled: Flow<Boolean> = context.adblockDataStore.data.map { it[Keys.easyPrivacy] ?: true }
         val customRules: Flow<String> = context.adblockDataStore.data.map { it[Keys.customRules] ?: "" }
         val disabledHosts: Flow<Set<String>> = context.adblockDataStore.data.map { it[Keys.disabledHosts] ?: emptySet() }
+        val bypassHosts: Flow<Set<String>> = context.adblockDataStore.data.map { it[Keys.bypassHosts] ?: emptySet() }
         val blockedTotal: Flow<Long> = context.adblockDataStore.data.map { it[Keys.blockedTotal] ?: 0L }
         val easyListEtag: Flow<String?> = context.adblockDataStore.data.map { it[Keys.easyListEtag] }
         val easyPrivacyEtag: Flow<String?> = context.adblockDataStore.data.map { it[Keys.easyPrivacyEtag] }
@@ -52,6 +54,9 @@ class AdBlockSettings
         suspend fun addBlocked(count: Long) = edit { it[Keys.blockedTotal] = (it[Keys.blockedTotal] ?: 0L) + count }
 
         suspend fun setDisabledHosts(hosts: Set<String>) = edit { it[Keys.disabledHosts] = hosts }
+
+        /** Host suffixes (for example an extension's base host) where blocking never applies. */
+        suspend fun setBypassHosts(hosts: Set<String>) = edit { it[Keys.bypassHosts] = hosts }
 
         suspend fun setEtags(
             easyList: String?,

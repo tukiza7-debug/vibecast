@@ -64,6 +64,8 @@ class UrlMatcher(rules: List<NetworkRule>) {
 
         var blocked: NetworkRule? = findBlocking(url, host, hostStart, request)
         if (blocked != null) {
+            // $important outranks whitelisting exceptions (ABP semantics).
+            if (blocked.isImportant) return Decision.Block(blocked)
             val exception = findException(url, host, hostStart, request)
             if (exception != null) return Decision.AllowException(exception)
             return Decision.Block(blocked)

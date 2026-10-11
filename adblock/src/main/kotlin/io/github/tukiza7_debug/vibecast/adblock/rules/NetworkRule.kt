@@ -24,6 +24,7 @@ data class RuleOptions(
     val firstPartyOnly: Boolean = false,
     val includedDomains: List<String> = emptyList(),
     val excludedDomains: List<String> = emptyList(),
+    val important: Boolean = false,
 )
 
 class NetworkRule(
@@ -42,6 +43,9 @@ class NetworkRule(
     val firstPartyOnly: Boolean get() = options.firstPartyOnly
     val includedDomains: List<String> get() = options.includedDomains
     val excludedDomains: List<String> get() = options.excludedDomains
+
+    /** $important rules block even when an exception would normally whitelist the request. */
+    val isImportant: Boolean get() = options.important
 
     sealed class Segment {
         data class Literal(val text: String) : Segment()

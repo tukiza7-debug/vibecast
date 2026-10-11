@@ -4,7 +4,7 @@ package io.github.tukiza7_debug.vibecast.adblock.rules
  * Parses the EasyList/Adblock Plus subset the engine supports:
  * "||domain^" host anchors, "|" start/end anchors, "*" wildcards, "^" separators,
  * "$third-party, $script, $image, $media, $popup, $stylesheet, $subdocument,
- * $xmlhttprequest, $object, $font, $other, $first-party", "domain=" lists,
+ * $xmlhttprequest, $object, $font, $other, $first-party, $important", "domain=" lists,
  * "@@" exceptions, "##selector" and "domain##selector" element hiding, "#@#" exceptions.
  */
 object FilterParser {
@@ -73,6 +73,7 @@ object FilterParser {
         var types: MutableSet<ResourceType>? = null
         var thirdPartyOnly = false
         var firstPartyOnly = false
+        var important = false
         var includedDomains: List<String> = emptyList()
         var excludedDomains: List<String> = emptyList()
         optionsPart?.split(',')?.forEach { option ->
@@ -80,6 +81,7 @@ object FilterParser {
             when {
                 name == "third-party" -> thirdPartyOnly = true
                 name == "~third-party" || name == "first-party" -> firstPartyOnly = true
+                name == "important" -> important = true
                 name.startsWith("domain=") -> {
                     val (inc, exc) = parseDomainList(name.removePrefix("domain="))
                     includedDomains = inc
@@ -109,6 +111,7 @@ object FilterParser {
                 firstPartyOnly = firstPartyOnly,
                 includedDomains = includedDomains,
                 excludedDomains = excludedDomains,
+                important = important,
             )
         var isStartAnchor = false
         var isEndAnchor = false
