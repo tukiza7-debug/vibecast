@@ -81,26 +81,29 @@ update dialog. Updates install in place because package ids never change:
 
 ## Your first extension in five steps (AddOnX)
 
-1. **Install AddOnX** and open it. Paste a website link into the analyzer and let it
-   record a listing page.
-2. **Review proposals.** AddOnX suggests CSS selectors for title, cover and link with
-   confidence levels; it never invents selectors. If nothing reliable is found, use
-   the visual picker to tap elements directly in the page.
-3. **Walk the steps.** The test panel runs the real engine per step — search, latest,
-   detail, episodes, video — and shows raw results; video preview plays through
-   Media3 exactly like VibeCast will.
-4. **Export.** Save the `.json` file and share the `unix1:…` code, or push the file
-   to your own GitHub repository (single file via `gc1:`, or a catalog with
-   `index.json` via `gx1:`).
-5. **Watch it.** Send the code to VibeCast — deep link, shared text, clipboard or the
-   signature-protected direct install — confirm the domains it will contact, and the
-   extension appears on Home.
+1. **Install AddOnX** and open it. On the Home tab paste one website link and tap
+   **Analyze & Build** — Auto Import reads the page and drafts a complete extension.
+   (Prefer control? The Analyzer tab offers the same flow step by step.)
+2. **Review the preview card.** Every proposed step carries a confidence level and
+   an honest issue list; AddOnX never invents selectors. Low-confidence steps route
+   to the visual picker so you can tap elements directly in the page.
+3. **Walk the steps.** *Test all* opens the test panel, which runs the real engine —
+   search, detail, episodes, video — with per-step timing, and video preview plays
+   through Media3 exactly like VibeCast will.
+4. **Export.** Validate & Export saves the extension under *Builds*, copies a
+   `unix1:…` code, and can publish the file to your own GitHub repository (single
+   file via `gc1:`, or a catalog with `index.json` via `gx1:`).
+5. **Watch it.** Send it to VibeCast — direct install, shared text, clipboard or
+   deep link — confirm the domains it will contact, and the extension appears on
+   Home with Continue Watching tracking your progress.
 
 The
 [sample extension](sample-extensions/internet-archive.json)
 is a complete working example: public-domain films from the Internet Archive's
 official JSON API, including pagination, filtering by format and a direct video
-strategy.
+strategy. It is also bundled inside the VibeCast APK — the Extensions tab can
+install it in one tap, and the site-APK workflow preinstalls it in standalone
+builds.
 
 ## Extension format
 

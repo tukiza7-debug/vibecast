@@ -61,7 +61,25 @@ Two kinds:
 - HTML: `{ "type": "html", "selector": "div.item" }` — every element matching the
   Jsoup CSS selector becomes one item.
 - JSON: `{ "type": "json", "path": "$.response.docs[*]" }` — a JSONPath expression;
-  optional `filterField` + `filterEquals` keep only matching elements.
+  optional filters keep only matching elements.
+
+Item filters (all optional, combinable, case-insensitive except `filterEquals`):
+
+- `filterField` — the field to test: an item selector for HTML sources or a
+  JSONPath (relative to the item) for JSON sources. Required when any filter
+  criterion is present.
+- `filterEquals` — keep items whose field equals this value exactly.
+- `filterSuffix` — keep items whose field ends with this value.
+- `filterContains` — keep items whose field contains this value.
+
+```json
+"source": {
+  "type": "json",
+  "path": "$.files[*]",
+  "filterField": "name",
+  "filterSuffix": ".mp4"
+}
+```
 
 ### `fields`
 
@@ -123,3 +141,18 @@ result, bad selector, regex that matched nothing) instead of returning half-popu
 items. Content safety: extensions are expected to point at sources they are allowed
 to use; DRM-protected and Cloudflare-gated streams are detected and reported as
 "unsupported" rather than bypassed.
+
+### Dry-run
+
+`ExtensionEngine.dryRun(extension)` checks structure without touching the network:
+every request template must resolve with sample `{query}`/`{page}`/`{url}` values,
+every CSS selector must parse, every regex must compile and every `filterField`
+must carry a criterion. The engine returns one issue per defect, named by step and
+field, so AddOnX can show a full fix-list before the first request is ever made.
+
+### URL resolution
+
+Relative URLs follow RFC 3986: root-relative (`/watch/1`), dot-segment
+(`../a/./b`), query-only (`?page=2` keeps the base path) and protocol-relative
+(`//cdn.host/v.mp4` inherits the base scheme) forms are all normalized the same
+way in the engine, the codes and both apps.
