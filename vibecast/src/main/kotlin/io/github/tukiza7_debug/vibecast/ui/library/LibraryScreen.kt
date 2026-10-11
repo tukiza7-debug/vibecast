@@ -9,7 +9,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -24,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -93,6 +100,7 @@ class LibraryViewModel
 @Composable
 fun LibraryScreen(
     onOpenDetail: (String) -> Unit,
+    onOpenHome: () -> Unit = {},
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
     var tab by remember { mutableIntStateOf(0) }
@@ -112,7 +120,11 @@ fun LibraryScreen(
         when (tab) {
             0 ->
                 if (favorites.isEmpty()) {
-                    EmptyState("Nothing saved yet")
+                    EmptyState(
+                        icon = Icons.Filled.Favorite,
+                        title = "Nothing saved yet",
+                        body = "Tap the heart on any title to keep it here for instant access.",
+                    )
                 } else {
                     LazyColumn {
                         items(favorites, key = { it.itemKey }) { favorite ->
@@ -127,14 +139,18 @@ fun LibraryScreen(
                 }
             else ->
                 if (history.isEmpty()) {
-                    EmptyState("Watch something first")
+                    EmptyState(
+                        icon = Icons.Filled.History,
+                        title = "Watch something first",
+                        body = "Playback positions land here automatically, so you can pick up exactly where you left off.",
+                        actionLabel = "Browse Home",
+                        onAction = onOpenHome,
+                    )
                 } else {
                     LazyColumn {
                         items(history, key = { it.itemKey }) { entry ->
-                            LibraryCard(
-                                title = entry.title,
-                                cover = entry.cover,
-                                subtitle = "Watched at ${entry.positionMs / 60000} min",
+                            HistoryCard(
+                                entry = entry,
                                 onClick = { viewModel.routeFor(entry) { route -> route?.let(onOpenDetail) } },
                             )
                         }
@@ -166,17 +182,71 @@ private fun LibraryCard(
                 contentScale = ContentScale.Crop,
                 modifier =
                     Modifier
+                        .padding(10.dp)
                         .size(64.dp)
                         .clip(RoundedCornerShape(10.dp)),
             )
-            Column(Modifier.padding(12.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
+            Column(Modifier.padding(end = 12.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun HistoryCard(
+    entry: HistoryEntity,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(
+                model = entry.cover,
+                contentDescription = entry.title,
+                contentScale = ContentScale.Crop,
+                modifier =
+                    Modifier
+                        .padding(10.dp)
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+            )
+            Column(Modifier.padding(end = 12.dp).weight(1f)) {
+                Text(entry.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val progress =
+                    if (entry.durationMs > 0) (entry.positionMs.toFloat() / entry.durationMs).coerceIn(0f, 1f) else 0f
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                )
+                Text(
+                    if (progress >= 0.95f) {
+                        "Finished"
+                    } else {
+                        "${entry.positionMs / 60000} min in - tap to resume"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Icon(
+                Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 12.dp),
+            )
         }
     }
 }

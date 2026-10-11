@@ -44,7 +44,7 @@ object AppModule {
                 runBlocking {
                     SitePolicy(
                         disabledHosts = settings.disabledHosts.first(),
-                        bypassHosts = headersRegistry.requiredHosts(),
+                        bypassHosts = settings.bypassHosts.first() + headersRegistry.requiredHosts(),
                     )
                 }
             } catch (_: Exception) {

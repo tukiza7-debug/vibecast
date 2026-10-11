@@ -11,15 +11,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,6 +46,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private val searchHints = listOf("nosferatu", "charlie chaplin", "b movie", "western", "sci-fi", "film noir")
 
 data class SearchGroup(
     val extensionId: String,
@@ -114,9 +120,11 @@ class SearchViewModel
         }
     }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     onOpenDetail: (String) -> Unit,
+    onOpenExtensions: () -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsState()
@@ -124,17 +132,17 @@ fun SearchScreen(
     val groups by viewModel.groups.collectAsState()
     val busy by viewModel.busy.collectAsState()
     val extensions by viewModel.extensions.collectAsState()
-    var textFieldValue by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize()) {
         OutlinedTextField(
-            value = textFieldValue,
-            onValueChange = {
-                textFieldValue = it
-                viewModel.onQueryChange(it)
-            },
+            value = query,
+            onValueChange = viewModel::onQueryChange,
             label = { Text("Search one or all extensions") },
             singleLine = true,
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = {
+                if (busy) CircularProgressIndicator(Modifier.padding(6.dp))
+            },
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -156,9 +164,51 @@ fun SearchScreen(
             }
         }
         if (query.isBlank()) {
-            EmptyState("Type to search across installed extensions", Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                EmptyState(
+                    icon = Icons.Filled.Search,
+                    title = "Search everything at once",
+                    body = "Type above and VibeCast queries every enabled extension in parallel. Not sure what to watch? Try one of these:",
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(searchHints) { hint ->
+                        FilterChip(
+                            selected = false,
+                            onClick = { viewModel.onQueryChange(hint) },
+                            label = { Text(hint) },
+                        )
+                    }
+                }
+                if (extensions.isEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    EmptyState(
+                        icon = Icons.Outlined.Extension,
+                        title = "No extensions yet",
+                        body = "Search works through installed extensions. Add one first.",
+                        actionLabel = "Go to Extensions",
+                        onAction = onOpenExtensions,
+                    )
+                }
+            }
         } else if (busy && groups.isEmpty()) {
             EmptyState("Searching…", Modifier.weight(1f))
+        } else if (groups.all { it.error != null } && groups.isNotEmpty()) {
+            Column(Modifier.weight(1f)) {
+                EmptyState(
+                    icon = Icons.Outlined.SearchOff,
+                    title = "Every source failed",
+                    body = "The errors below name the step and reason - tap a source chip above to retry just one.",
+                )
+                LazyColumn {
+                    groups.forEach { group ->
+                        item(key = "${group.extensionId}-err") { ErrorState(group.error ?: "") }
+                    }
+                }
+            }
         } else {
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
                 groups.forEach { group ->

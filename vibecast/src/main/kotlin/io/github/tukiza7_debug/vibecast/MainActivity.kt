@@ -135,11 +135,15 @@ fun AppScaffold(importController: ImportPromptController) {
                 HomeScreen(
                     onOpenDetail = { navController.navigate(it) },
                     onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                    onOpenExtensions = { navController.navigate(Routes.EXTENSIONS) { launchSingleTop = true } },
                     snackbarHostState = snackbarHostState,
                 )
             }
             composable(Routes.SEARCH) {
-                SearchScreen(onOpenDetail = { navController.navigate(it) })
+                SearchScreen(
+                    onOpenDetail = { navController.navigate(it) },
+                    onOpenExtensions = { navController.navigate(Routes.EXTENSIONS) { launchSingleTop = true } },
+                )
             }
             composable(Routes.LIBRARY) {
                 LibraryScreen(onOpenDetail = { navController.navigate(it) })
