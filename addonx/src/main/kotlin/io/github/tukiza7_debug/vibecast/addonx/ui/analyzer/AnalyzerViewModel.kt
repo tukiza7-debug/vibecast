@@ -9,6 +9,7 @@ import io.github.tukiza7_debug.vibecast.adblock.FilterEngine.SitePolicy
 import io.github.tukiza7_debug.vibecast.addonx.analyzer.DomAnalyzer
 import io.github.tukiza7_debug.vibecast.addonx.analyzer.ExtensionBuilder
 import io.github.tukiza7_debug.vibecast.addonx.data.BuildStore
+import io.github.tukiza7_debug.vibecast.addonx.data.DraftSession
 import io.github.tukiza7_debug.vibecast.addonx.data.TokenStore
 import io.github.tukiza7_debug.vibecast.addonx.github.GitHubApi
 import io.github.tukiza7_debug.vibecast.addonx.github.GitHubException
@@ -41,6 +42,7 @@ class AnalyzerViewModel
         private val gitHubApi: GitHubApi,
         private val workflowRunner: GitHubWorkflowRunner,
         private val bridgeFactory: PickBridgeFactory,
+        val draftSession: DraftSession,
     ) : ViewModel() {
         val policyProvider: () -> SitePolicy = { SitePolicy() }
 
@@ -79,6 +81,9 @@ class AnalyzerViewModel
         private val _lastAction = MutableStateFlow<String?>(null)
         val lastAction: StateFlow<String?> = _lastAction.asStateFlow()
 
+        private val _spaHint = MutableStateFlow(false)
+        val spaHint: StateFlow<Boolean> = _spaHint.asStateFlow()
+
         data class RecordedJson(val url: String, val itemCount: Int, val sampleKeys: List<String>)
 
         data class Assignment(val selector: String, val outerHtml: String, val text: String)
@@ -111,7 +116,26 @@ class AnalyzerViewModel
             type: io.github.tukiza7_debug.vibecast.adblock.rules.ResourceType?,
             blocked: Boolean,
         ) {
-            if (blocked || !_recording.value) return
+            // JSON endpoints and media URLs are recorded by the WebView client via
+            // recordJsonCandidate / recordMediaCandidate; nothing else is needed here.
+        }
+
+        /** Called by the WebView client when an intercepted response is application/json. */
+        fun recordJsonCandidate(url: String) {
+            if (_recordedJson.value.any { it.url == url }) return
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching {
+                    val response = httpClient.fetch(HttpRequest(url, headers = mapOf("User-Agent" to "AddOnX/1.0"), timeoutMs = 8_000))
+                    val text = response.bodyText()
+                    if (!text.trimStart().startsWith("[") && !text.trimStart().startsWith("{")) return@launch
+                    val element = Json.parseToJsonElement(text)
+                    val array = firstArray(element) ?: return@launch
+                    val keys = (array.firstOrNull() as? JsonObject)?.keys?.toList() ?: return@launch
+                    if (keys.isEmpty()) return@launch
+                    val entry = RecordedJson(url, array.size, keys)
+                    _recordedJson.value = (_recordedJson.value + entry).takeLast(8)
+                }
+            }
         }
 
         fun recordMediaCandidate(url: String) {
@@ -133,6 +157,7 @@ class AnalyzerViewModel
                     val text = html?.trim('"')?.replace("\\\"", "\"")?.replace("\\\\", "\\") ?: return@launch
                     _analysis.value = DomAnalyzer.analyze(text, url)
                     _detailFields.value = DomAnalyzer.analyzeDetail(text, url)
+                    _spaHint.value = DomAnalyzer.looksLikeSinglePageApp(text)
                 }
             }
         }
@@ -184,6 +209,9 @@ class AnalyzerViewModel
             name: String,
             version: Int,
         ): ExtensionBuilder.Draft? {
+            // A draft handed over from Auto Import (or a previous export) wins over the
+            // live analysis so the user keeps editing exactly what they previewed.
+            draftSession.session.value?.let { return it.draft }
             val analysis = _analysis.value ?: return null
             val search = analysis.proposals.firstOrNull() ?: return null
             val base =

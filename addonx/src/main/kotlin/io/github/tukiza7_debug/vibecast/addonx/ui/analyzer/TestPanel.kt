@@ -1,106 +1,199 @@
 package io.github.tukiza7_debug.vibecast.addonx.ui.analyzer
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.tukiza7_debug.vibecast.core.engine.EngineException
-import io.github.tukiza7_debug.vibecast.core.engine.ExtensionEngine
-import io.github.tukiza7_debug.vibecast.core.http.HttpClient
-import io.github.tukiza7_debug.vibecast.core.model.Extension
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import javax.inject.Inject
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import io.github.tukiza7_debug.vibecast.addonx.analyzer.ExtensionBuilder
 
-data class StepResult(
-    val step: String,
-    val timingMs: Long,
-    val output: String,
-    val error: String?,
-)
-
-@HiltViewModel
-class StepTestViewModel
-    @Inject
-    constructor(
-        private val httpClient: HttpClient,
-    ) : ViewModel() {
-        private val _results = MutableStateFlow<List<StepResult>>(emptyList())
-        val results: StateFlow<List<StepResult>> = _results.asStateFlow()
-
-        private val _running = MutableStateFlow(false)
-        val running: StateFlow<Boolean> = _running.asStateFlow()
-
-        private val engine = ExtensionEngine(httpClient)
-
-        fun runStep(
-            extension: Extension,
-            step: String,
-            itemUrl: String,
-        ) {
-            _running.value = true
-            viewModelScope.launch(Dispatchers.IO) {
-                val started = System.currentTimeMillis()
-                val result =
-                    runCatching {
-                        withContext(Dispatchers.IO) {
-                            when (step) {
-                                "search" -> engine.search(extension, "test", 1).take(5).toString()
-                                "latest" -> engine.latest(extension, 1).take(5).toString()
-                                "detail" -> engine.detail(extension, itemUrl).toString()
-                                "episodes" -> engine.episodes(extension, itemUrl).take(20).toString()
-                                "video" -> engine.video(extension, itemUrl).let { "${it.url} mime=${it.mimeType} quality=${it.quality}" }
-                                else -> throw EngineException(step, null, "unknown step")
-                            }
-                        }
-                    }
-                val elapsed = System.currentTimeMillis() - started
-                _results.value = listOf(
-                    StepResult(
-                        step = step,
-                        timingMs = elapsed,
-                        output = result.getOrNull() ?: "",
-                        error = result.exceptionOrNull()?.message,
-                    ),
-                ) + _results.value
-                _running.value = false
-            }
-        }
-    }
-
+/** Test tab: builds the draft and runs every step through the real core engine. */
 @Composable
 fun TestPanel(
     viewModel: AnalyzerViewModel,
     modifier: Modifier = Modifier,
+    testViewModel: StepTestViewModel = hiltViewModel(),
 ) {
-    val detailFields by viewModel.detailFields.collectAsState()
-    val recordedMedia by viewModel.recordedMedia.collectAsState()
+    val results by testViewModel.results.collectAsState()
+    val pipelineRunning by testViewModel.pipelineRunning.collectAsState()
+    val lastAction by viewModel.lastAction.collectAsState()
+    var previewUrl by remember { mutableStateOf<String?>(null) }
+    var previewMime by remember { mutableStateOf<String?>(null) }
+
     Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(14.dp)) {
-        Text("Step tests", style = MaterialTheme.typography.titleLarge)
+        Text("Test with the real engine", style = MaterialTheme.typography.titleLarge)
         Text(
-            "Build the draft from the current proposals and run each step against the real engine. " +
-                "The video step result can be previewed after export.",
+            "This runs the current draft through search, detail, episodes and video exactly like VibeCast " +
+                "would - no mocks. Video results preview with Media3.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        detailFields.forEach { (field, selector) ->
-            Text("$field -> $selector", style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = {
+                    val draft =
+                        viewModel.buildDraft(
+                            id = ExtensionBuilder.idForHost(viewModel.pageUrl.value.ifEmpty { "https://invalid.test" }),
+                            name = "Test draft",
+                            version = 1,
+                        )
+                    if (draft == null) {
+                        testViewModel.reportSetupError(
+                            "nothing to test yet: load a page with proposals or open a draft from Auto Import",
+                        )
+                    } else {
+                        testViewModel.runPipeline(draft)
+                    }
+                },
+                enabled = !pipelineRunning,
+            ) {
+                if (pipelineRunning) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("Run all steps")
+            }
+            OutlinedButton(onClick = { testViewModel.clear() }, enabled = !pipelineRunning) {
+                Text("Clear")
+            }
         }
-        Text("Media candidates: ${recordedMedia.size}", style = MaterialTheme.typography.bodyMedium)
+        lastAction?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        results.forEach { result ->
+            Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (result.error == null) Icons.Filled.CheckCircle else Icons.Filled.Error,
+                            contentDescription = null,
+                            tint = if (result.error == null) Color(0xFF4ADE80) else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(result.step.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "${result.timingMs} ms",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (result.error != null) {
+                        Text(
+                            result.error ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        Text(
+                            result.output.take(400),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (result.step == "video" && result.streamUrl != null) {
+                            OutlinedButton(onClick = {
+                                previewUrl = result.streamUrl
+                                previewMime = result.streamMime
+                            }) {
+                                Icon(Icons.Filled.PlayCircle, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Preview with Media3")
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+
+    previewUrl?.let { url ->
+        AlertDialog(
+            onDismissRequest = { previewUrl = null },
+            confirmButton = {
+                TextButton(onClick = { previewUrl = null }) { Text("Close") }
+            },
+            title = { Text("Media3 preview") },
+            text = {
+                VideoPreview(
+                    url = url,
+                    mimeType = previewMime,
+                    modifier = Modifier.fillMaxWidth().height(220.dp),
+                )
+            },
+        )
+    }
+}
+
+/** Real ExoPlayer surface: HLS for m3u8, progressive for anything else. */
+@Composable
+private fun VideoPreview(
+    url: String,
+    mimeType: String?,
+    modifier: Modifier = Modifier,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val player =
+        remember(url) {
+            ExoPlayer.Builder(context).build().apply {
+                val item =
+                    when (mimeType) {
+                        MimeTypes.APPLICATION_M3U8 -> MediaItem.fromUri(url)
+                        else -> MediaItem.fromUri(url)
+                    }
+                setMediaItem(item)
+                prepare()
+                playWhenReady = true
+            }
+        }
+    AndroidView(
+        factory = { ctx ->
+            PlayerView(ctx).apply {
+                this.player = player
+                useController = true
+            }
+        },
+        modifier = modifier,
+    )
 }

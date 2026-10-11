@@ -28,7 +28,12 @@ object AppModule {
     ): OkHttpClient {
         fun currentPolicy(): SitePolicy =
             try {
-                runBlocking { SitePolicy(disabledHosts = settings.disabledHosts.first()) }
+                runBlocking {
+                    SitePolicy(
+                        disabledHosts = settings.disabledHosts.first(),
+                        bypassHosts = settings.bypassHosts.first(),
+                    )
+                }
             } catch (_: Exception) {
                 SitePolicy()
             }
