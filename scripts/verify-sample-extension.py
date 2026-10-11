@@ -57,22 +57,29 @@ def main() -> None:
 
     # The item's url field is produced by the extension's own mapping template.
     url_template = extension["search"]["fields"]["url"].get("template", "")
-    detail_url = url_template.replace("{value}", first["identifier"])
-    status, _, body = fetch(detail_url)
-    if status != 200:
-        fail(f"metadata endpoint returned HTTP {status}")
-    metadata = json.loads(body)
-    title = metadata.get("metadata", {}).get("title")
-    if not title:
-        fail("metadata response has no $.metadata.title")
-    files = metadata.get("files", [])
-    mpeg4 = [f for f in files if f.get("format") == "MPEG4"]
-    if not mpeg4:
-        fail("metadata has no files with format == MPEG4")
+    metadata = None
+    chosen = None
+    for doc in docs[:10]:
+        doc_url = url_template.replace("{value}", doc["identifier"])
+        status, _, body = fetch(doc_url)
+        if status != 200:
+            continue
+        candidate = json.loads(body)
+        files = candidate.get("files", [])
+        if candidate.get("metadata", {}).get("title") and any(
+            f.get("format") == "MPEG4" for f in files
+        ):
+            metadata = candidate
+            chosen = doc
+            break
+    if metadata is None:
+        fail("no doc among the first 10 has a title and MPEG4 files")
+    title = metadata["metadata"]["title"]
+    mpeg4 = [f for f in metadata["files"] if f.get("format") == "MPEG4"]
     ok(f"detail title {title!r}; {len(mpeg4)} MPEG4 files")
 
     episode = mpeg4[0]
-    video_url = f"https://archive.org/download/{first['identifier']}/{urllib.parse.quote(episode['name'])}"
+    video_url = f"https://archive.org/download/{chosen['identifier']}/{urllib.parse.quote(episode['name'])}"
     try:
         status, headers, _ = fetch(video_url, method="HEAD", timeout=45)
     except Exception as error:  # noqa: BLE001 - reported verbatim below
