@@ -27,6 +27,21 @@ object AutoAnalyzer {
         val issues: List<String> = emptyList(),
     )
 
+    /** Outcome of one live engine check (T3): run against the same engine VibeCast uses. */
+    data class StepCheck(
+        val step: String,
+        val passed: Boolean,
+        val detail: String,
+    )
+
+    data class Verification(
+        val checks: List<StepCheck>,
+        /** Non-empty when the live video step produced a playable stream. */
+        val videoUrl: String? = null,
+    ) {
+        val videoPassed: Boolean get() = !videoUrl.isNullOrBlank()
+    }
+
     data class AutoResult(
         val url: String,
         val baseUrl: String,
@@ -39,22 +54,35 @@ object AutoAnalyzer {
         val jsonEndpoint: RecordedJsonEndpoint?,
         val needsPicker: Boolean,
         val issues: List<String> = emptyList(),
+        /** Set after the live engine run; null when verification could not run at all. */
+        val verification: Verification? = null,
     ) {
-        val overallConfidence: DomAnalyzer.Confidence =
-            when {
-                steps.any { it.confidence == DomAnalyzer.Confidence.LOW } -> DomAnalyzer.Confidence.LOW
-                steps.any { it.confidence == DomAnalyzer.Confidence.MEDIUM } -> DomAnalyzer.Confidence.MEDIUM
-                else -> DomAnalyzer.Confidence.HIGH
-            }
+        val overallConfidence: DomAnalyzer.Confidence
+            get() =
+                when {
+                    verification != null ->
+                        when {
+                            verification.checks.all { it.passed } && verification.videoPassed -> DomAnalyzer.Confidence.HIGH
+                            verification.checks.none { it.passed } -> DomAnalyzer.Confidence.LOW
+                            !verification.videoPassed -> DomAnalyzer.Confidence.LOW
+                            else -> DomAnalyzer.Confidence.MEDIUM
+                        }
+                    steps.any { it.confidence == DomAnalyzer.Confidence.LOW } -> DomAnalyzer.Confidence.LOW
+                    steps.any { it.confidence == DomAnalyzer.Confidence.MEDIUM } -> DomAnalyzer.Confidence.MEDIUM
+                    else -> DomAnalyzer.Confidence.HIGH
+                }
     }
 
     /** Query parameter names commonly carrying the search term, most specific first. */
     private val searchParamNames = listOf("q", "s", "search", "query", "keyword", "keywords", "k", "searchterm")
 
-    private val mediaPattern = Regex("""https?://[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?""")
-    private val fileDirectivePattern = Regex("""["']?file["']?\s*:\s*["']([^"']+\.(?:m3u8|mp4))["']""")
-    private val sourceTagPattern = Regex("""<source[^>]+src=["']([^"']+\.(?:m3u8|mp4))["']""", RegexOption.IGNORE_CASE)
-    private val videoTagPattern = Regex("""<video[^>]+src=["']([^"']+\.(?:m3u8|mp4))["']""", RegexOption.IGNORE_CASE)
+    private val mediaPattern = Regex("""https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>\\]*)?""")
+    private val fileDirectivePattern = Regex("""["']?file["']?\s*:\s*["']([^"']+\.(?:m3u8|mp4|mpd))["']""")
+    private val sourceTagPattern = Regex("""<source[^>]+src=["']([^"']+\.(?:m3u8|mp4|mpd))["']""", RegexOption.IGNORE_CASE)
+    private val videoTagPattern = Regex("""<video[^>]+src=["']([^"']+\.(?:m3u8|mp4|mpd))["']""", RegexOption.IGNORE_CASE)
+
+    /** Query parameter names carrying pagination, most specific first. */
+    private val pageParamNames = listOf("page", "paged", "pagina", "pg", "p", "offset", "start", "from")
 
     /**
      * Analyzes one page. Runs fully off the request thread: the only network access is
@@ -84,8 +112,9 @@ object AutoAnalyzer {
         val best = analysis.proposals.firstOrNull()
         val jsonEndpoint = recording.jsonEndpoints.maxByOrNull { it.itemCount }
 
-        // 2. Derive the search template from the URL, or fall back to the listing itself.
-        val searchTemplate = detectSearchTemplate(url)
+        // 2. Derive the search template from the URL (query + page params), or from
+        // detected pagination links, or fall back to the listing itself.
+        val searchTemplate = withPageSupport(detectSearchTemplate(url), url, analysis.pagination)
         val searchConfidence =
             when {
                 searchTemplate?.contains("{query}") == true -> DomAnalyzer.Confidence.HIGH
@@ -145,7 +174,7 @@ object AutoAnalyzer {
                         linkedMapOf(
                             "title" to ExtensionBuilder.FieldDraft(selector = best.titleSelector ?: "a"),
                             "url" to ExtensionBuilder.FieldDraft(selector = best.linkSelector ?: "a[href]", attribute = "href"),
-                            "cover" to ExtensionBuilder.FieldDraft(selector = best.coverSelector, attribute = "src"),
+                            "cover" to ExtensionBuilder.FieldDraft(selector = best.coverSelector, attribute = best.coverAttribute ?: "src"),
                         ),
                 )
             searchStep =
@@ -187,9 +216,17 @@ object AutoAnalyzer {
                 jsonPath = null,
                 fields =
                     linkedMapOf(
-                        "title" to ExtensionBuilder.FieldDraft(selector = detailFields["title"] ?: "h1"),
-                        "synopsis" to ExtensionBuilder.FieldDraft(selector = detailFields["synopsis"]),
-                        "cover" to ExtensionBuilder.FieldDraft(selector = detailFields["cover"], attribute = "src"),
+                        "title" to ExtensionBuilder.FieldDraft(selector = detailFields["title"]?.selector ?: "h1"),
+                        "synopsis" to
+                            ExtensionBuilder.FieldDraft(
+                                selector = detailFields["synopsis"]?.selector,
+                                attribute = detailFields["synopsis"]?.attribute,
+                            ),
+                        "cover" to
+                            ExtensionBuilder.FieldDraft(
+                                selector = detailFields["cover"]?.selector,
+                                attribute = detailFields["cover"]?.attribute ?: "src",
+                            ),
                     ),
             )
         val detailStep =
@@ -302,7 +339,7 @@ object AutoAnalyzer {
                 ExtensionBuilder.VideoDraft(
                     requestUrl = "{url}",
                     strategy = "regex",
-                    pattern = """["']?file["']?\s*:\s*["']([^"']+\.(?:m3u8|mp4))["']""",
+                    pattern = """["']?file["']?\s*:\s*["']([^"']+\.(?:m3u8|mp4|mpd))["']""",
                 ) to
                     StepProposal(
                         step = "video",
@@ -313,7 +350,7 @@ object AutoAnalyzer {
                 ExtensionBuilder.VideoDraft(
                     requestUrl = "{url}",
                     strategy = "regex",
-                    pattern = """<source[^>]+src=["']([^"']+\.(?:m3u8|mp4))["']""",
+                    pattern = """<source[^>]+src=["']([^"']+\.(?:m3u8|mp4|mpd))["']""",
                 ) to
                     StepProposal(
                         step = "video",
@@ -324,7 +361,7 @@ object AutoAnalyzer {
                 ExtensionBuilder.VideoDraft(
                     requestUrl = "{url}",
                     strategy = "regex",
-                    pattern = """<video[^>]+src=["']([^"']+\.(?:m3u8|mp4))["']""",
+                    pattern = """<video[^>]+src=["']([^"']+\.(?:m3u8|mp4|mpd))["']""",
                 ) to
                     StepProposal(
                         step = "video",
@@ -335,7 +372,7 @@ object AutoAnalyzer {
                 ExtensionBuilder.VideoDraft(
                     requestUrl = "{url}",
                     strategy = "regex",
-                    pattern = """https?://[^\s"'<>\\]+\.(?:m3u8|mp4)""",
+                    pattern = """https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd)""",
                 ) to
                     StepProposal(
                         step = "video",
@@ -350,7 +387,10 @@ object AutoAnalyzer {
                     StepProposal(
                         step = "video",
                         confidence = DomAnalyzer.Confidence.MEDIUM,
-                        summary = "media was recorded while browsing; webviewSniff replays it at runtime",
+                        summary =
+                            "media was captured while browsing (${allMedia.size} urls); webviewSniff replays " +
+                                "it at runtime inside VibeCast",
+                        issues = listOf("not ready yet: the video step still needs a live pass in VibeCast"),
                     )
             else ->
                 ExtensionBuilder.VideoDraft(
@@ -363,6 +403,7 @@ object AutoAnalyzer {
                         summary = "no media detected in the server HTML; webviewSniff needs a real device WebView",
                         issues =
                             listOf(
+                                "not ready yet: no media evidence was captured for this site",
                                 "if the site loads video from embeds, open an episode page, record the network and analyze again",
                             ),
                     )
@@ -371,28 +412,75 @@ object AutoAnalyzer {
     private fun collectMediaCandidates(html: String): List<String> = mediaPattern.findAll(html).map { it.value }.distinct().toList()
 
     /**
-     * Turns the page URL into a search template when a query-looking parameter exists.
-     * Returns the URL unchanged when no search parameter is present.
+     * Turns the page URL into a {query}/{page} template when a query-looking or
+     * pagination-looking parameter exists. Returns the URL unchanged when neither
+     * is present.
      */
     fun detectSearchTemplate(url: String): String? {
         if (!url.contains("?")) return null
         val (base, queryPart) = url.split("?", limit = 2)
         val params = queryPart.split("&")
         var queryParamName: String? = null
+        var pageParamFound = false
         val rebuilt =
             params.map { param ->
                 val name = param.substringBefore("=")
                 val value = param.substringAfter("=", "")
                 val looksTextual = value.isNotEmpty() && !value.chars().allMatch { Character.isDigit(it) }
-                if (name.lowercase() in searchParamNames && looksTextual) {
-                    queryParamName = name
-                    "$name={query}"
-                } else {
-                    param
+                val looksNumeric = value.isNotEmpty() && value.chars().allMatch { Character.isDigit(it) }
+                when {
+                    name.lowercase() in searchParamNames && looksTextual -> {
+                        queryParamName = name
+                        "$name={query}"
+                    }
+                    name.lowercase() in pageParamNames && looksNumeric -> {
+                        pageParamFound = true
+                        "$name={page}"
+                    }
+                    else -> param
                 }
             }
-        return queryParamName?.let { "$base?${rebuilt.joinToString("&")}" }
+        val rebuiltUrl = "$base?${rebuilt.joinToString("&")}"
+        return when {
+            queryParamName != null -> rebuiltUrl
+            pageParamFound -> rebuiltUrl
+            else -> null
+        }
     }
+
+    /**
+     * Adds {page} support to the search template from live pagination evidence:
+     * either a page query parameter seen in pagination links, or a /page/N path.
+     */
+    private fun withPageSupport(
+        template: String?,
+        listingUrl: String,
+        pagination: List<DomAnalyzer.PaginationProposal>,
+    ): String? {
+        if (template?.contains("{page}") == true) return template
+        val pageParam =
+            pagination.firstNotNullOfOrNull { proposal ->
+                pageParamRegex.find(proposal.sampleUrl)?.groupValues?.get(1)
+            }
+        if (pageParam != null) {
+            val base = template ?: listingUrl
+            return when {
+                Regex("[?&]$pageParam=").containsMatchIn(base) ->
+                    Regex("([?&])$pageParam=[^&]*").replace(base) { match -> "${match.groupValues[1]}$pageParam={page}" }
+                base.contains("?") -> "$base&$pageParam={page}"
+                else -> "$base?$pageParam={page}"
+            }
+        }
+        val pathPagination =
+            pagination.firstOrNull { proposal -> pathPageRegex.containsMatchIn(proposal.sampleUrl) }
+        if (pathPagination != null) {
+            return pathPageRegex.replace(pathPagination.sampleUrl.substringBefore("?"), "/page/{page}")
+        }
+        return template
+    }
+
+    private val pageParamRegex = Regex("[?&](page|paged|pagina|pg|p|offset|start|from)=(\\d+)")
+    private val pathPageRegex = Regex("/page/\\d+")
 
     fun defaultName(host: String): String {
         val labels = host.removePrefix("www.").split(".")

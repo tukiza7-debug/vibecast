@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.adblock.FilterEngine
 import io.github.tukiza7_debug.vibecast.adblock.FilterEngine.SitePolicy
 import io.github.tukiza7_debug.vibecast.addonx.analyzer.DomAnalyzer
+import io.github.tukiza7_debug.vibecast.addonx.analyzer.EvaluatedHtml
 import io.github.tukiza7_debug.vibecast.addonx.analyzer.ExtensionBuilder
 import io.github.tukiza7_debug.vibecast.addonx.data.BuildStore
 import io.github.tukiza7_debug.vibecast.addonx.data.DraftSession
@@ -154,7 +155,9 @@ class AnalyzerViewModel
             _pageUrl.value = url
             view.evaluateJavascript("document.documentElement.outerHTML") { html ->
                 viewModelScope.launch(Dispatchers.Default) {
-                    val text = html?.trim('"')?.replace("\\\"", "\"")?.replace("\\\\", "\\") ?: return@launch
+                    // evaluateJavascript returns a JSON string literal - decode it as
+                    // JSON instead of chaining replaces that corrupt escape sequences.
+                    val text = EvaluatedHtml.decode(html) ?: return@launch
                     _analysis.value = DomAnalyzer.analyze(text, url)
                     _detailFields.value = DomAnalyzer.analyzeDetail(text, url)
                     _spaHint.value = DomAnalyzer.looksLikeSinglePageApp(text)
@@ -162,8 +165,8 @@ class AnalyzerViewModel
             }
         }
 
-        private val _detailFields = MutableStateFlow<Map<String, String>>(emptyMap())
-        val detailFields: StateFlow<Map<String, String>> = _detailFields.asStateFlow()
+        private val _detailFields = MutableStateFlow<Map<String, DomAnalyzer.FieldSuggestion>>(emptyMap())
+        val detailFields: StateFlow<Map<String, DomAnalyzer.FieldSuggestion>> = _detailFields.asStateFlow()
 
         /** Called from the JS bridge when the user taps an element in pick mode. */
         fun onPicked(

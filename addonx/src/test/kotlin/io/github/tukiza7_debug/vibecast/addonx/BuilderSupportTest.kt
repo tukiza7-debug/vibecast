@@ -87,10 +87,12 @@ class BuilderSupportTest {
     }
 
     @Test
-    fun `webviewSniff failure suggests recording`() {
+    fun `webviewSniff failure suggests device-only and alternatives`() {
         val text = friendlyStepError("video", "webviewSniff requires a WebView sniffer")
-        assertTrue(text!!.contains("Record"))
+        assertTrue(text!!.contains("real device"))
+        assertTrue(text.contains("html"))
         assertTrue(text.contains("regex"))
+        assertTrue(text.contains("iframe"))
     }
 
     @Test

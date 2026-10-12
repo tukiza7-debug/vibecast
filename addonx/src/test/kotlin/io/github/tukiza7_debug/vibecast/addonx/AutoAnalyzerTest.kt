@@ -144,16 +144,55 @@ class AutoAnalyzerTest {
     }
 
     @Test
-    fun `search template detection ignores numeric parameters`() {
+    fun `search template detection maps query and page parameters`() {
         assertEquals(
-            "https://s.test/search?q={query}&page=2",
+            "https://s.test/search?q={query}&page={page}",
             AutoAnalyzer.detectSearchTemplate("https://s.test/search?q=action&page=2"),
         )
-        assertEquals(null, AutoAnalyzer.detectSearchTemplate("https://s.test/browse?page=2"))
+        assertEquals(
+            "https://s.test/browse?page={page}",
+            AutoAnalyzer.detectSearchTemplate("https://s.test/browse?page=2"),
+        )
         assertEquals(
             "https://s.test/find?keyword={query}",
             AutoAnalyzer.detectSearchTemplate("https://s.test/find?keyword=nova"),
         )
+        assertEquals(null, AutoAnalyzer.detectSearchTemplate("https://s.test/browse"))
+    }
+
+    @Test
+    fun `pagination links add page support when the url has none`() {
+        val html =
+            listingHtml.replace(
+                "</body>",
+                "<a rel=\"next\" href=\"https://streamflix.test/browse?page=3\">Next</a></body>",
+            )
+        val result =
+            AutoAnalyzer.analyze(
+                url = "https://streamflix.test/browse",
+                html = html,
+                recording = AutoAnalyzer.Recording(),
+                engine = engine,
+            )
+        assertTrue(
+            "search template should carry {page} from the pagination link: ${result.draft.search.requestUrl}",
+            result.draft.search.requestUrl.contains("{page}"),
+        )
+    }
+
+    @Test
+    fun `captured media keeps the video step honest until a live pass`() {
+        val result =
+            AutoAnalyzer.analyze(
+                url = "https://streamflix.test/title/alpha",
+                html = detailHtml(variant = "none"),
+                recording =
+                    AutoAnalyzer.Recording(mediaUrls = listOf("https://cdn.streamflix.test/hls/alpha/master.m3u8")),
+                engine = engine,
+            )
+        assertEquals("webviewSniff", result.draft.video.strategy)
+        val video = result.steps.first { it.step == "video" }
+        assertTrue(video.issues.any { it.contains("not ready") })
     }
 
     @Test

@@ -134,9 +134,9 @@ fun friendlyStepError(
     val lower = raw.lowercase()
     return when {
         "webviewsniff" in lower || "sniffer" in lower ->
-            "This site hides its video inside a web player, so the engine cannot see it from plain HTML. " +
-                "Open the Page tab, tap Record while an episode page plays, then test again - " +
-                "or switch the video step to the html or regex strategy if the page embeds the stream."
+            "webviewSniff only works on a real device inside VibeCast's player - this test panel has no " +
+                "WebView sniffer. Switch the video step to the html, regex or iframe strategy to test here, " +
+                "or record the page in the Page tab while an episode plays and analyze again."
         "step is not defined" in lower ->
             "This extension does not define the $step step. Optional steps can stay missing; required ones " +
                 "need to be built in the editor before exporting."

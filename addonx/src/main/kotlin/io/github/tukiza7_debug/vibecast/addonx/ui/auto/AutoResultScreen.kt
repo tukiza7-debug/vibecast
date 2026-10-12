@@ -128,6 +128,7 @@ private fun AutoResultContent(
     var publishPath by remember { mutableStateOf("extensions/built.json") }
     var pendingAction by remember { mutableStateOf<PendingAction?>(null) }
     var checklistSeen by remember { mutableStateOf(false) }
+    val videoVerified = result.verification?.videoPassed == true
 
     pendingAction?.let { action ->
         CompletenessDialog(
@@ -158,6 +159,23 @@ private fun AutoResultContent(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AssistChip(onClick = {}, label = { Text(result.pageType.name.lowercase().replaceFirstChar { it.uppercase() }) })
                     ConfidenceChip(result.overallConfidence)
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(if (videoVerified) "ready" else "video not verified") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint =
+                                    if (videoVerified) {
+                                        io.github.tukiza7_debug.vibecast.addonx.ui.theme.ConfidenceHigh
+                                    } else {
+                                        io.github.tukiza7_debug.vibecast.addonx.ui.theme.ConfidenceLow
+                                    },
+                                modifier = Modifier.size(16.dp),
+                            )
+                        },
+                    )
                     if (result.needsPicker) {
                         AssistChip(onClick = onEdit, label = { Text("picker needed") })
                     }
@@ -190,6 +208,34 @@ private fun AutoResultContent(
                         step.issues.forEach { issue ->
                             Text(issue, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         }
+                    }
+                }
+            }
+        }
+
+        result.verification?.let { verification ->
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Live test (this device)", style = MaterialTheme.typography.titleMedium)
+                    verification.checks.forEach { check ->
+                        Text(
+                            (if (check.passed) "\u2713 " else "\u2717 ") + check.step + " - " + check.detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color =
+                                if (check.passed) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
+                        )
+                    }
+                    if (!verification.videoPassed) {
+                        Text(
+                            "Send to VibeCast unlocks once the video step returns a stream on this device. " +
+                                "Use Test all, or record the page while an episode plays, then analyze again.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
@@ -283,6 +329,7 @@ private fun AutoResultContent(
                         }
                         if (checklistSeen) runSend() else pendingAction = PendingAction("Send to VibeCast", runSend)
                     },
+                    enabled = videoVerified,
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Filled.SendToMobile, contentDescription = null)
@@ -298,6 +345,14 @@ private fun AutoResultContent(
                 ) {
                     Text("Copy code")
                 }
+            }
+            if (!videoVerified) {
+                Text(
+                    "Sending is disabled until the video step passes live on this device - " +
+                        "the extension would not play yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(

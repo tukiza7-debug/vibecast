@@ -12,11 +12,19 @@ import org.jsoup.nodes.Element
 object DomAnalyzer {
     enum class Confidence { HIGH, MEDIUM, LOW }
 
+    /** A detected field: a plain CSS selector plus the attribute to read (null = text). */
+    data class FieldSuggestion(
+        val selector: String,
+        val attribute: String? = null,
+    )
+
     data class Proposal(
         val itemSelector: String,
         val titleSelector: String?,
         val linkSelector: String?,
         val coverSelector: String?,
+        /** Attribute the cover selector must be read from (src by default, data-src for lazy sites). */
+        val coverAttribute: String? = null,
         val itemCount: Int,
         val confidence: Confidence,
     )
@@ -56,11 +64,11 @@ object DomAnalyzer {
                 if (first.tagName() in setOf("script", "style", "br", "img", "input", "option")) return@forEach
                 val titleSelector = pickTitleSelector(first)
                 val linkSelector = pickLinkSelector(first) ?: return@forEach
-                val coverSelector = pickCoverSelector(first)
+                val cover = pickCoverSelector(first)
                 val itemSelector = relativeItemSelector(container, signature)
                 val confidence =
                     when {
-                        group.size >= 8 && titleSelector != null && coverSelector != null -> Confidence.HIGH
+                        group.size >= 8 && titleSelector != null && cover != null -> Confidence.HIGH
                         group.size >= 5 && titleSelector != null -> Confidence.MEDIUM
                         else -> Confidence.LOW
                     }
@@ -69,7 +77,8 @@ object DomAnalyzer {
                         itemSelector = itemSelector,
                         titleSelector = titleSelector,
                         linkSelector = linkSelector,
-                        coverSelector = coverSelector,
+                        coverSelector = cover?.selector,
+                        coverAttribute = cover?.attribute,
                         itemCount = group.size,
                         confidence = confidence,
                     )
@@ -105,22 +114,54 @@ object DomAnalyzer {
         return Analysis(best, pagination)
     }
 
-    /** Suggests detail fields from a single page. */
+    /** Suggests detail fields from a single page, each with the attribute to read. */
     fun analyzeDetail(
         html: String,
         baseUrl: String,
-    ): Map<String, String> {
+    ): Map<String, FieldSuggestion> {
         val doc = Jsoup.parse(html, baseUrl)
-        val fields = mutableMapOf<String, String>()
-        doc.selectFirst("h1")?.let { fields["title"] = relativeSelector(doc, it) }
-        doc.selectFirst("meta[name=description]")?.let { fields["synopsis"] = "meta[name=description]@content" }
-        doc.select("p").firstOrNull { it.text().length > 120 }?.let { fields["synopsis"] = relativeSelector(doc, it) }
-        doc.select("img[src]").firstOrNull { img ->
-            val src = img.absUrl("src")
-            img.hasClass("poster") || img.hasClass("thumb") || img.hasClass("cover") ||
-                src.contains("poster", ignoreCase = true) || src.contains("cover", ignoreCase = true)
-        }?.let { fields["cover"] = relativeSelector(doc, it) }
+        val fields = mutableMapOf<String, FieldSuggestion>()
+        doc.selectFirst("h1")?.let { fields["title"] = FieldSuggestion(relativeSelector(doc, it)) }
+        doc.selectFirst("meta[name=description]")?.let {
+            fields["synopsis"] = FieldSuggestion("meta[name=description]", attribute = "content")
+        }
+        if (!fields.containsKey("synopsis")) {
+            doc.select("p").firstOrNull { it.text().length > 120 }?.let {
+                fields["synopsis"] = FieldSuggestion(relativeSelector(doc, it))
+            }
+        }
+        // Detail cover: og:image first, then a poster-like image. There is deliberately
+        // no bare "first image" fallback - on listing pages that would turn every page
+        // into a MIXED detail candidate.
+        doc.selectFirst("meta[property=\"og:image\"]")?.let {
+            fields["cover"] = FieldSuggestion("meta[property=\"og:image\"]", attribute = "content")
+        }
+        if (!fields.containsKey("cover")) {
+            coverImage(doc)?.let { img ->
+                fields["cover"] =
+                    FieldSuggestion(
+                        relativeSelector(doc, img),
+                        attribute = if (img.hasAttr("src")) "src" else "data-src",
+                    )
+            }
+        }
         return fields
+    }
+
+    /**
+     * Picks the most poster-like image on a detail page: semantic class or URL hints
+     * only; lazy-loaded data-src images count too.
+     */
+    private fun coverImage(doc: org.jsoup.nodes.Document): Element? {
+        val images = doc.select("img")
+        if (images.isEmpty()) return null
+        return images.firstOrNull { img ->
+            val cls = img.classNames().joinToString(" ").lowercase()
+            val src = (img.attr("src") + " " + img.attr("data-src")).lowercase()
+            listOf("poster", "cover", "thumb", "art").any { cls.contains(it) } ||
+                listOf("poster", "cover", "thumb").any { src.contains(it) }
+        }
+            ?: images.firstOrNull { it.hasAttr("data-src") && !it.attr("src").startsWith("data:") }
     }
 
     private fun relativeItemSelector(
@@ -180,14 +221,44 @@ object DomAnalyzer {
         return if (detailLink != null) "a[href]" else null
     }
 
-    private fun pickCoverSelector(item: Element): String? {
-        val img = item.selectFirst("img[src]") ?: return null
-        return "img"
+    /**
+     * Cover selector for a card: prefer images with semantic class/URL hints, and
+     * keep the attribute the URL actually lives in (src vs lazy data-src) so the
+     * generated extension reads the right one.
+     */
+    private fun pickCoverSelector(item: Element): FieldSuggestion? {
+        val images = item.select("img")
+        if (images.isEmpty()) return null
+        val img =
+            images.firstOrNull { candidate ->
+                val cls = candidate.classNames().joinToString(" ").lowercase()
+                val src = (candidate.attr("src") + " " + candidate.attr("data-src")).lowercase()
+                listOf("poster", "cover", "thumb", "card").any { cls.contains(it) } ||
+                    listOf("poster", "cover", "thumb").any { src.contains(it) }
+            }
+                ?: images.firstOrNull { it.hasAttr("src") && !it.attr("src").startsWith("data:") }
+                ?: images.firstOrNull { it.hasAttr("data-src") }
+                ?: return null
+        val attribute = if (img.hasAttr("src") && !img.attr("src").startsWith("data:")) "src" else "data-src"
+        return FieldSuggestion(classSelector(img), attribute)
     }
 
+    /**
+     * tag + the most stable class: semantic keywords win, then a plain wordy class;
+     * hashed utility classes (css-1x2y3z) are skipped when a better one exists.
+     */
     private fun classSelector(element: Element): String {
         val classes = element.classNames()
-        return if (classes.isEmpty()) element.tagName() else element.tagName() + "." + classes.first()
+        if (classes.isEmpty()) return element.tagName()
+        val semantic =
+            classes.firstOrNull { cls ->
+                listOf("poster", "cover", "thumb", "title", "card", "item", "image", "name").any { cls.lowercase().contains(it) }
+            }
+        val stable =
+            semantic
+                ?: classes.firstOrNull { cls -> cls.length >= 3 && !cls.any { it.isDigit() } }
+                ?: classes.first()
+        return element.tagName() + "." + stable
     }
 
     /** Turns a recorded listing URL into a {query}/{page} template for the search step. */
