@@ -127,8 +127,11 @@ Strategies, in order of reliability:
 
 1. `direct` — the request URL is itself the media (mp4/m3u8/mpd); MIME is inferred
    from the URL when the server does not say.
-2. `html` — fetch the page, extract the media URL with `selector` (+ optional
-   `regex`).
+2. `html` — fetch the page and take the media URL from the element matched by
+   `selector` (src/href/data-src, absolutized against the page); an optional
+   `pattern` post-processes the extracted text. Without a `selector` the
+   `pattern` runs over the page text; with neither, a built-in media scan
+   (m3u8/mp4/mpd/webm) finds any direct media URL on the page.
 3. `regex` — run `pattern` over the raw page/script text.
 4. `iframe` — collect iframe/embed sources from the page.
 5. `webviewSniff` — load the page in a hidden WebView with ad blocking enabled and

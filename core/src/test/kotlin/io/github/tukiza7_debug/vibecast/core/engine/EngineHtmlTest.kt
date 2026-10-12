@@ -19,13 +19,14 @@ class EngineHtmlTest {
     private lateinit var engine: ExtensionEngine
     private lateinit var extension: io.github.tukiza7_debug.vibecast.core.model.Extension
     private lateinit var iframeExtension: io.github.tukiza7_debug.vibecast.core.model.Extension
+    private lateinit var base: String
 
     @Before
     fun setUp() {
         server = MockWebServer()
         server.start()
         engine = ExtensionEngine(OkHttpFetcher(OkHttpClient()))
-        val base = server.url("/").toString()
+        base = server.url("/").toString()
         extension = SchemaValidator.decodeAndValidate(TestExtensions.htmlSource(base))
         iframeExtension = SchemaValidator.decodeAndValidate(TestExtensions.iframeSource(base))
     }
@@ -76,6 +77,49 @@ class EngineHtmlTest {
         val stream = engine.video(extension, "${server.url("/")}play/alpha-1")
         assertEquals("https://cdn.fixture.test/hls/alpha/index.m3u8", stream.url)
         assertEquals("application/x-mpegurl", stream.mimeType)
+    }
+
+    @Test
+    fun `html strategy takes the media url from the matched element`() {
+        val htmlVideo = SchemaValidator.decodeAndValidate(TestExtensions.htmlStrategySource(base, selector = "video source"))
+        enqueueHtml(
+            "<html><body><video controls><source src=\"https://cdn.fixture.test/hls/alpha/index.m3u8\" " +
+                "type=\"application/x-mpegurl\"></video></body></html>",
+        )
+        val stream = engine.video(htmlVideo, "${server.url("/")}play/alpha-1")
+        assertEquals("https://cdn.fixture.test/hls/alpha/index.m3u8", stream.url)
+        assertEquals("application/x-mpegurl", stream.mimeType)
+    }
+
+    @Test
+    fun `html strategy scans the page when no selector or pattern is set`() {
+        val htmlVideo = SchemaValidator.decodeAndValidate(TestExtensions.htmlStrategySource(base))
+        enqueueHtml("<html><body><p>mirror: https://cdn.fixture.test/files/alpha.mp4?token=1</p></body></html>")
+        val stream = engine.video(htmlVideo, "${server.url("/")}play/alpha-1")
+        assertEquals("https://cdn.fixture.test/files/alpha.mp4?token=1", stream.url)
+    }
+
+    @Test
+    fun `html strategy applies the pattern to the extracted text`() {
+        val htmlVideo =
+            SchemaValidator.decodeAndValidate(
+                TestExtensions.htmlStrategySource(
+                    base,
+                    selector = "#config",
+                    // JSON text carries the regex as (https?://[^|]+\\.m3u8)
+                    pattern = "(https?://[^|]+\\\\.m3u8)",
+                ),
+            )
+        enqueueHtml("<html><body><div id=\"config\" data-src='stub|https://cdn.fixture.test/w/alpha.m3u8|'></div></body></html>")
+        val stream = engine.video(htmlVideo, "${server.url("/")}play/alpha-1")
+        assertEquals("https://cdn.fixture.test/w/alpha.m3u8", stream.url)
+    }
+
+    @Test(expected = EngineException::class)
+    fun `html strategy fails with an explicit reason when the selector misses`() {
+        val htmlVideo = SchemaValidator.decodeAndValidate(TestExtensions.htmlStrategySource(base, selector = "video source"))
+        enqueueHtml("<html><body><p>no player here</p></body></html>")
+        engine.video(htmlVideo, "${server.url("/")}play/alpha-1")
     }
 
     @Test

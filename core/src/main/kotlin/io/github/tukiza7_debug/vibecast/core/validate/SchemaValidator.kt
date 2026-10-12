@@ -18,12 +18,13 @@ object SchemaValidator {
 
     private val idRegex = Regex("^[a-z0-9]+([.-][a-z0-9]+)+$")
     private val langRegex = Regex("^[a-z]{2}(-[A-Z]{2})?$")
-    private val strategies = setOf("direct", "iframe", "regex", "webviewSniff")
+    private val strategies = setOf("direct", "html", "iframe", "regex", "webviewSniff")
     private val listSteps = listOf("search", "latest", "popular")
     private val requiredListSteps = listOf("search")
     private val requiredVideoFields =
         mapOf(
             "direct" to emptyList(),
+            "html" to emptyList(),
             "iframe" to listOf("selector"),
             "regex" to listOf("pattern"),
             "webviewSniff" to emptyList(),

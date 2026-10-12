@@ -119,6 +119,7 @@ class ExtensionEngine(
             when (step.strategy) {
                 STRATEGY_DIRECT -> resolveDirect(step, extension.baseUrl, episodeUrl, headers)
                 STRATEGY_REGEX -> resolveRegex(step, pageUrl, headers)
+                STRATEGY_HTML -> resolveHtml(step, pageUrl, headers)
                 STRATEGY_IFRAME -> resolveIframe(step, pageUrl, headers)
                 STRATEGY_WEBVIEW -> return resolveWithSniffer(step, pageUrl, headers)
                 else -> throw EngineException("video", "strategy", "unknown strategy '${step.strategy}'")
@@ -208,7 +209,7 @@ class ExtensionEngine(
         } catch (e: Exception) {
             issues.add("[video.request.url] template does not resolve: ${e.message}")
         }
-        if (extension.video.strategy !in listOf(STRATEGY_DIRECT, STRATEGY_REGEX, STRATEGY_IFRAME, STRATEGY_WEBVIEW)) {
+        if (extension.video.strategy !in listOf(STRATEGY_DIRECT, STRATEGY_REGEX, STRATEGY_HTML, STRATEGY_IFRAME, STRATEGY_WEBVIEW)) {
             issues.add("[video.strategy] unknown strategy '${extension.video.strategy}'")
         }
         extension.video.pattern?.let { pattern ->
@@ -243,6 +244,62 @@ class ExtensionEngine(
             runRegex(pattern, text)
                 ?: throw EngineException("video", "pattern", "pattern did not match page $pageUrl")
         return ResolvedStream(UrlResolver.absolutize(found, pageUrl), text, null)
+    }
+
+    /**
+     * The documented `html` strategy: fetch the episode page, then take the media
+     * URL from the element matched by [VideoStep.selector] (src/href/data-src,
+     * absolutized against the page) with an optional [VideoStep.pattern] applied
+     * to the extracted text. Without a selector the pattern runs over the page
+     * text; with neither, the built-in media scan finds any direct media URL.
+     */
+    private fun resolveHtml(
+        step: VideoStep,
+        pageUrl: String,
+        headers: Map<String, String>,
+    ): ResolvedStream {
+        val text = fetchText(pageUrl, headers, step.timeoutMs)
+        val selector = step.selector?.trim().orEmpty()
+        val raw =
+            when {
+                selector.isNotEmpty() -> {
+                    val doc = Jsoup.parse(text, pageUrl)
+                    val element =
+                        doc.selectFirst(selector)
+                            ?: throw EngineException("video", "selector", "no element matched '$selector' on $pageUrl")
+                    val attribute =
+                        listOf("src", "href", "data-src", "content")
+                            .map { attr -> element.absUrl(attr).ifEmpty { element.attr(attr) } }
+                            .firstOrNull { it.isNotBlank() }
+                            ?: throw EngineException(
+                                "video",
+                                "selector",
+                                "element matched by '$selector' has no usable URL attribute",
+                            )
+                    if (attribute.startsWith("data:")) {
+                        throw EngineException("video", "selector", "element matched by '$selector' holds a data: URI, not a media URL")
+                    }
+                    attribute
+                }
+                step.pattern != null ->
+                    runRegex(step.pattern, text)
+                        ?: throw EngineException("video", "pattern", "pattern did not match page $pageUrl")
+                else ->
+                    bareMediaUrlPattern.find(text)?.value
+                        ?: throw EngineException(
+                            "video",
+                            "selector",
+                            "no direct media URL found on $pageUrl; add a selector or pattern to the html strategy",
+                        )
+            }
+        val url =
+            if (selector.isNotEmpty() && step.pattern != null) {
+                runRegex(step.pattern, raw)
+                    ?: throw EngineException("video", "pattern", "pattern did not match the extracted text")
+            } else {
+                raw
+            }
+        return ResolvedStream(UrlResolver.absolutize(url, pageUrl), text, null)
     }
 
     private fun resolveIframe(
@@ -477,6 +534,10 @@ class ExtensionEngine(
             throw EngineException("video", "pattern", "invalid regex '$pattern': ${e.message}", e)
         }
 
+    /** Full-URL media scan used by the html strategy when no selector/pattern is set. */
+    private val bareMediaUrlPattern =
+        Regex("""https?://[^\s"'<>\\]+\.(?:m3u8|mp4|mpd|webm)(?:\?[^\s"'<>\\]*)?""")
+
     private fun fetchText(
         url: String,
         headers: Map<String, String>,
@@ -582,6 +643,7 @@ class ExtensionEngine(
         const val SOURCE_JSON = "json"
         const val STRATEGY_DIRECT = "direct"
         const val STRATEGY_REGEX = "regex"
+        const val STRATEGY_HTML = "html"
         const val STRATEGY_IFRAME = "iframe"
         const val STRATEGY_WEBVIEW = "webviewSniff"
     }
