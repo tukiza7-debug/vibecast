@@ -113,12 +113,15 @@ class PlayerConnection
 
         init {
             appScope.launch(Dispatchers.Main) {
-                val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-                val future = MediaController.Builder(context, token).buildAsync()
+                // A synchronous failure here (rare OEM binding issues) must set the
+                // error state instead of killing the whole process.
+                val controllerResult =
+                    runCatching {
+                        val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
+                        MediaController.Builder(context, token).buildAsync().get()
+                    }
                 val controller =
-                    try {
-                        future.get()
-                    } catch (e: Exception) {
+                    controllerResult.getOrElse { e ->
                         _error.value = "player unavailable: ${e.message}"
                         return@launch
                     }

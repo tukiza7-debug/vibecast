@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Extension
@@ -238,7 +239,9 @@ fun SearchScreen(
                                     contentPadding = PaddingValues(horizontal = 16.dp),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    items(group.items, key = { it.url }) { item ->
+                                    // positional keys: two items can share a URL (same
+                                    // archive item listed twice) and url keys would crash
+                                    itemsIndexed(group.items) { _, item ->
                                         PosterCard(item) { onOpenDetail(detailRouteFor(group.extensionId, item)) }
                                     }
                                 }

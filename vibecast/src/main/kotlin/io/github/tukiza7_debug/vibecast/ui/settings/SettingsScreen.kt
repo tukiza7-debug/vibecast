@@ -19,9 +19,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,12 +34,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.tukiza7_debug.vibecast.BuildConfig
+import io.github.tukiza7_debug.vibecast.crash.CrashReporter
 import io.github.tukiza7_debug.vibecast.data.prefs.SettingsStore
 import io.github.tukiza7_debug.vibecast.data.remote.UpdateRepository
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 import javax.inject.Inject
 
 @HiltViewModel
@@ -205,6 +210,32 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                     }) { Text("Install ${release.versionName}") }
                     OutlinedButton(onClick = { viewModel.skipVersion(release.versionName) }) { Text("Skip") }
                 }
+            }
+        }
+        Section("Diagnostics") {
+            var crashText by remember { mutableStateOf<String?>(null) }
+            var copied by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                crashText = if (CrashReporter.lastCrashDate(context) > 0L) CrashReporter.readCrash(context) else null
+            }
+            if (crashText == null) {
+                Text(
+                    "No crash recorded on this device.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                val crashTime = DateFormat.getDateTimeInstance().format(Date(CrashReporter.lastCrashDate(context)))
+                Text(
+                    "Last crash: $crashTime",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("VibeCast crash log", crashText))
+                    copied = true
+                }) { Text(if (copied) "Copied" else "Copy crash log") }
             }
         }
         Section("About") {

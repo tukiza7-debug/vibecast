@@ -10,6 +10,7 @@ import coil.memory.MemoryCache
 import dagger.hilt.android.HiltAndroidApp
 import io.github.tukiza7_debug.vibecast.adblock.update.FilterEngineLoader
 import io.github.tukiza7_debug.vibecast.adblock.update.FilterUpdateWorker
+import io.github.tukiza7_debug.vibecast.crash.CrashReporter
 import io.github.tukiza7_debug.vibecast.data.repo.ExtensionRepository
 import io.github.tukiza7_debug.vibecast.imageloading.CoverHeaderInterceptor
 import io.github.tukiza7_debug.vibecast.imageloading.ImageHeaderRegistry
@@ -39,6 +40,8 @@ class VibecastApplication : Application(), Configuration.Provider, ImageLoaderFa
 
     override fun onCreate() {
         super.onCreate()
+        // must be the very first thing: any crash after this point is captured
+        CrashReporter.install(this)
         appScope.launch {
             filterEngineLoader.load()
         }

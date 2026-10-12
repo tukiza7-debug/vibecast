@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -27,8 +28,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
+import io.github.tukiza7_debug.vibecast.crash.CrashReporter
 import io.github.tukiza7_debug.vibecast.importcode.ClipboardCodeWatcher
 import io.github.tukiza7_debug.vibecast.importcode.ImportPromptBus
+import io.github.tukiza7_debug.vibecast.ui.crash.CrashReportHost
 import io.github.tukiza7_debug.vibecast.ui.detail.DetailScreen
 import io.github.tukiza7_debug.vibecast.ui.extensions.ExtensionsScreen
 import io.github.tukiza7_debug.vibecast.ui.home.HomeScreen
@@ -41,6 +44,7 @@ import io.github.tukiza7_debug.vibecast.ui.nav.Routes
 import io.github.tukiza7_debug.vibecast.ui.search.SearchScreen
 import io.github.tukiza7_debug.vibecast.ui.settings.SettingsScreen
 import io.github.tukiza7_debug.vibecast.ui.theme.VibeCastTheme
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -103,6 +107,21 @@ class MainActivity : ComponentActivity() {
 fun AppScaffold(importController: ImportPromptController) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    // Every detail click goes through this guard: the route is remembered as a
+    // crash breadcrumb and a bad route shows a snackbar instead of crashing.
+    val openDetail: (String) -> Unit =
+        { route ->
+            CrashReporter.recordRoute(route)
+            try {
+                navController.navigate(route)
+            } catch (_: Exception) {
+                // unmatched route: stay on screen and tell the user instead of crashing
+                scope.launch {
+                    snackbarHostState.showSnackbar("Could not open this item")
+                }
+            }
+        }
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val navItems =
@@ -138,7 +157,7 @@ fun AppScaffold(importController: ImportPromptController) {
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
-                    onOpenDetail = { navController.navigate(it) },
+                    onOpenDetail = openDetail,
                     onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                     onOpenExtensions = { navController.navigate(Routes.EXTENSIONS) { launchSingleTop = true } },
                     snackbarHostState = snackbarHostState,
@@ -146,13 +165,13 @@ fun AppScaffold(importController: ImportPromptController) {
             }
             composable(Routes.SEARCH) {
                 SearchScreen(
-                    onOpenDetail = { navController.navigate(it) },
+                    onOpenDetail = openDetail,
                     onOpenExtensions = { navController.navigate(Routes.EXTENSIONS) { launchSingleTop = true } },
                 )
             }
             composable(Routes.LIBRARY) {
                 LibraryScreen(
-                    onOpenDetail = { navController.navigate(it) },
+                    onOpenDetail = openDetail,
                     onOpenHome = { navController.navigate(Routes.HOME) { launchSingleTop = true } },
                 )
             }
@@ -172,13 +191,16 @@ fun AppScaffold(importController: ImportPromptController) {
                     itemUrl = args.getString("url").orEmpty(),
                     title = args.getString("title").orEmpty(),
                     cover = args.getString("cover")?.takeIf { it.isNotEmpty() },
-                    autoplay = args.getBoolean("autoplay", false),
+                    // Query args arrive as strings; "1" is the autoplay marker
+                    // written by Routes.detail().
+                    autoplay = args.getString("autoplay") == "1",
                     onBack = { navController.popBackStack() },
                 )
             }
         }
         ImportSheetHost(controller = importController)
         ExtensionsUndoHost(snackbarHostState, navController)
+        CrashReportHost(snackbarHostState)
     }
 }
 
