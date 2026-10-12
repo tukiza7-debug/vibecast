@@ -199,8 +199,7 @@ class FeedRepository
         /** Short, human-readable failure text; the technical detail stays in logs. */
         private fun friendly(e: Throwable): String = friendlySourceError(e)
 
-        private fun isOptionalMissing(e: Throwable): Boolean =
-            e.message?.contains("step is not defined", ignoreCase = true) == true
+        private fun isOptionalMissing(e: Throwable): Boolean = e.message?.contains("step is not defined", ignoreCase = true) == true
 
         data class HomeRow(
             val extensionId: String,

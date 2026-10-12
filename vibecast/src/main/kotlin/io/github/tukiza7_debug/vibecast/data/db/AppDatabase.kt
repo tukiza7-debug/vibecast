@@ -97,6 +97,15 @@ interface HistoryDao {
     @Query("SELECT * FROM history WHERE itemKey = :key")
     suspend fun byKey(key: String): HistoryEntity?
 
+    @Query(
+        "SELECT * FROM history WHERE extensionId = :extensionId AND itemUrl = :itemUrl " +
+            "ORDER BY updatedAt DESC LIMIT 1",
+    )
+    suspend fun byItem(
+        extensionId: String,
+        itemUrl: String,
+    ): HistoryEntity?
+
     @Upsert
     suspend fun upsert(entry: HistoryEntity)
 }

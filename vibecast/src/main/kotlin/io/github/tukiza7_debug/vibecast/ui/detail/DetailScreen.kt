@@ -56,9 +56,6 @@ import io.github.tukiza7_debug.vibecast.player.PlayerConnection
 import io.github.tukiza7_debug.vibecast.ui.common.CoverImage
 import io.github.tukiza7_debug.vibecast.ui.common.ErrorState
 import io.github.tukiza7_debug.vibecast.ui.common.pressScale
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -113,7 +110,9 @@ class DetailViewModel
                     extension = ext
                     val detail = feedRepository.detail(ext, itemUrl)
                     val episodes = feedRepository.episodes(ext, itemUrl)
-                    val resume = historyRepository.resumePosition(extensionId, itemUrl)
+                    // Aggregate position for the header hint: the newest history row for
+                    // this item (per-episode resume is applied in play()).
+                    val resume = historyRepository.itemResume(extensionId, itemUrl)
                     _state.value =
                         DetailState(
                             loading = false,
@@ -143,10 +142,9 @@ class DetailViewModel
         }
 
         /**
-         * Resolves episode streams in parallel (fast start) and tolerates individual
-         * failures: broken episodes are dropped from the queue instead of failing the
-         * whole batch. [onReady] fires once playback is prepared so the UI can open
-         * the player screen.
+         * Resolves the selected episode first and starts playback immediately; the
+         * remaining episodes are resolved lazily in the background and appended to
+         * the queue so auto-advance keeps working without blocking the start.
          */
         fun play(
             episodeIndex: Int,
@@ -160,33 +158,42 @@ class DetailViewModel
             viewModelScope.launch {
                 _state.value = _state.value.copy(resolving = true, error = null)
                 try {
-                    coroutineScope {
-                        val resolved =
-                            episodes.map { episode ->
-                                async { episode to runCatching { feedRepository.stream(ext, episode.url) } }
-                            }.awaitAll()
-                        val playable = resolved.mapNotNull { (episode, result) -> result.getOrNull()?.let { episode to it } }
-                        val startIndex = playable.indexOfFirst { it.first.url == requested.url }
-                        if (startIndex < 0) {
-                            val cause = resolved.firstOrNull { it.first.url == requested.url }?.second?.exceptionOrNull()
-                            throw cause ?: IllegalStateException("this episode's stream could not be resolved")
-                        }
-                        val startMs = if (episodeIndex == 0) _state.value.resumeMs else 0L
-                        val items =
-                            playable.map { (episode, stream) ->
+                    val stream = feedRepository.stream(ext, requested.url)
+                    // Resume must match the episode being played, not the detail page.
+                    val startMs = historyRepository.resumePosition(id, requested.url)
+                    val selectedItem =
+                        PlayerConnection.PlaybackItem(
+                            mediaId = requested.url,
+                            title = requested.name,
+                            streamRef = stream,
+                            extensionId = id,
+                            cover = _state.value.cover,
+                            baseUrl = ext.baseUrl,
+                            itemUrl = itemUrl,
+                        )
+                    val speed = settings.defaultSpeed.firstOrNull() ?: 1f
+                    val started = playerConnection.setPlaylist(listOf(selectedItem), 0, startMs, speed)
+                    if (!started) {
+                        throw IllegalStateException(playerConnection.error.value ?: "playback could not start")
+                    }
+                    onReady()
+                    // Background prefetch in episode order; failures skip just that episode.
+                    episodes.forEachIndexed { index, episode ->
+                        if (index == episodeIndex) return@forEachIndexed
+                        val resolved = runCatching { feedRepository.stream(ext, episode.url) }.getOrNull() ?: return@forEachIndexed
+                        playerConnection.append(
+                            listOf(
                                 PlayerConnection.PlaybackItem(
                                     mediaId = episode.url,
                                     title = episode.name,
-                                    streamRef = stream,
+                                    streamRef = resolved,
                                     extensionId = id,
                                     cover = _state.value.cover,
                                     baseUrl = ext.baseUrl,
                                     itemUrl = itemUrl,
-                                )
-                            }
-                        val speed = settings.defaultSpeed.firstOrNull() ?: 1f
-                        playerConnection.setPlaylist(items, startIndex, startMs, speed)
-                        onReady()
+                                ),
+                            ),
+                        )
                     }
                 } catch (ex: Exception) {
                     _state.value = _state.value.copy(error = friendlyDetailError(ex))
@@ -203,6 +210,8 @@ internal fun friendlyDetailError(ex: Exception): String =
         ex.message?.contains("not installed", ignoreCase = true) == true -> "this source is no longer installed"
         ex is java.io.IOException -> "network problem - check your connection and try again"
         ex.message?.contains("no episodes", ignoreCase = true) == true -> "no episodes were found on this page"
+        ex.message?.contains("stream URL is empty", ignoreCase = true) == true -> "this episode has no playable stream"
+        ex.message?.contains("no playable streams", ignoreCase = true) == true -> "no playable stream was found for this episode"
         else -> "this item could not be loaded right now"
     }
 

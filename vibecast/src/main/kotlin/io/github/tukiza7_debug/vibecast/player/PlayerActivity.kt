@@ -10,7 +10,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import dagger.hilt.android.AndroidEntryPoint
-import io.github.tukiza7_debug.vibecast.data.repo.StreamRefresher
 import io.github.tukiza7_debug.vibecast.ui.player.PlayerScreen
 import io.github.tukiza7_debug.vibecast.ui.theme.VibeCastTheme
 import javax.inject.Inject
@@ -19,12 +18,8 @@ import javax.inject.Inject
 class PlayerActivity : ComponentActivity() {
     @Inject lateinit var playerConnection: PlayerConnection
 
-    @Inject lateinit var streamRefresher: StreamRefresher
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Wire the expired-URL recovery path once, at first player use.
-        playerConnection.setStreamRefresher { mediaId -> streamRefresher.resolve(mediaId) }
         setContent {
             val speed by playerConnection.speed.collectAsState()
             VibeCastTheme(themeMode = "dark") {

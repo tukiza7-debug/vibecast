@@ -25,6 +25,16 @@ class HistoryRepository
             episodeUrl: String,
         ): Long = historyDao.byKey(key(extensionId, episodeUrl))?.positionMs ?: 0L
 
+        /**
+         * Newest saved position across all episodes of one item page. Used for the
+         * aggregate "resume at" hint on the detail screen; playback itself resumes
+         * per episode via [resumePosition].
+         */
+        suspend fun itemResume(
+            extensionId: String,
+            itemUrl: String,
+        ): Long = historyDao.byItem(extensionId, itemUrl)?.positionMs ?: 0L
+
         suspend fun historyFor(
             extensionId: String,
             episodeUrl: String,

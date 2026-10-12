@@ -66,6 +66,7 @@ class PlayerConnection
         private val headersRegistry: HeadersRegistry,
         private val metaRegistry: PlaybackMetaRegistry,
         private val historyRepository: io.github.tukiza7_debug.vibecast.data.repo.HistoryRepository,
+        private val streamRefresher: io.github.tukiza7_debug.vibecast.data.repo.StreamRefresher,
         private val appScope: CoroutineScope,
     ) {
         data class PlaybackItem(
@@ -192,38 +193,78 @@ class PlayerConnection
             }
         }
 
+        /**
+         * Prepares playback. Returns false (with a user-visible error) when the queue
+         * is empty or the start position is out of range instead of letting Media3
+         * throw an IllegalArgumentException.
+         */
         suspend fun setPlaylist(
             items: List<PlaybackItem>,
             startIndex: Int,
             startMs: Long,
             speed: Float,
-        ) = withContext(Dispatchers.Main) {
-            _error.value = null
-            val controller = awaitController()
-            items.forEach { item ->
-                metaRegistry.put(
-                    PlaybackMeta(
-                        mediaId = item.mediaId,
-                        extensionId = item.extensionId,
-                        title = item.title,
-                        cover = item.cover,
-                        baseUrl = item.baseUrl,
-                        quality = item.streamRef.quality,
-                        itemUrl = item.itemUrl,
-                    ),
-                )
-                headersRegistry.register(item.mediaId, item.streamRef.url, item.baseUrl, item.streamRef.headers)
-            }
-            _playlist.value = items.map { it.mediaId }
-            val mediaItems =
-                items.map { item ->
-                    MediaItemFactory.build(item.streamRef, item.mediaId, item.title, item.streamRef.quality)
+        ): Boolean =
+            withContext(Dispatchers.Main) {
+                if (items.isEmpty()) {
+                    _error.value = "no playable streams were found for this item"
+                    return@withContext false
                 }
-            controller.setMediaItems(mediaItems, startIndex, startMs)
-            controller.setPlaybackSpeed(speed)
-            controller.prepare()
-            controller.play()
-        }
+                _error.value = null
+                val controller = awaitController()
+                items.forEach { item ->
+                    metaRegistry.put(
+                        PlaybackMeta(
+                            mediaId = item.mediaId,
+                            extensionId = item.extensionId,
+                            title = item.title,
+                            cover = item.cover,
+                            baseUrl = item.baseUrl,
+                            quality = item.streamRef.quality,
+                            itemUrl = item.itemUrl,
+                        ),
+                    )
+                    headersRegistry.register(item.mediaId, item.streamRef.url, item.baseUrl, item.streamRef.headers)
+                }
+                _playlist.value = items.map { it.mediaId }
+                val mediaItems =
+                    items.map { item ->
+                        MediaItemFactory.build(item.streamRef, item.mediaId, item.title, item.streamRef.quality)
+                    }
+                val safeIndex = startIndex.coerceIn(0, mediaItems.lastIndex)
+                val safeStartMs = startMs.coerceAtLeast(0L)
+                controller.setMediaItems(mediaItems, safeIndex, safeStartMs)
+                controller.setPlaybackSpeed(speed)
+                controller.prepare()
+                controller.play()
+                true
+            }
+
+        /**
+         * Appends lazily resolved episodes to the end of the current queue so the
+         * player can auto-advance without waiting for every stream to resolve up front.
+         */
+        suspend fun append(items: List<PlaybackItem>): Boolean =
+            withContext(Dispatchers.Main) {
+                if (items.isEmpty()) return@withContext false
+                val controller = controllerFuture.value ?: return@withContext false
+                items.forEach { item ->
+                    metaRegistry.put(
+                        PlaybackMeta(
+                            mediaId = item.mediaId,
+                            extensionId = item.extensionId,
+                            title = item.title,
+                            cover = item.cover,
+                            baseUrl = item.baseUrl,
+                            quality = item.streamRef.quality,
+                            itemUrl = item.itemUrl,
+                        ),
+                    )
+                    headersRegistry.register(item.mediaId, item.streamRef.url, item.baseUrl, item.streamRef.headers)
+                    controller.addMediaItem(MediaItemFactory.build(item.streamRef, item.mediaId, item.title, item.streamRef.quality))
+                }
+                _playlist.value = _playlist.value + items.map { it.mediaId }
+                true
+            }
 
         suspend fun refreshStream(
             mediaId: String,
@@ -233,7 +274,8 @@ class PlayerConnection
                 val controller = awaitController()
                 val index = _playlist.value.indexOf(mediaId)
                 if (index < 0) return@withContext false
-                val refreshed = runCatching { refreshRefresher(mediaId) }.getOrNull() ?: return@withContext false
+                val refreshed = runCatching { streamRefresher.resolve(mediaId) }.getOrNull() ?: return@withContext false
+                if (refreshed.url.isBlank()) return@withContext false
                 headersRegistry.register(mediaId, refreshed.url, refreshedBaseUrl(mediaId), refreshed.headers)
                 val meta = metaRegistry.get(mediaId) ?: return@withContext false
                 controller.replaceMediaItem(
@@ -245,14 +287,6 @@ class PlayerConnection
                 controller.play()
                 true
             }
-
-        private var refreshRefresherImpl: (suspend (String) -> StreamRef?)? = null
-
-        fun setStreamRefresher(refresher: suspend (String) -> StreamRef?) {
-            refreshRefresherImpl = refresher
-        }
-
-        private suspend fun refreshRefresher(mediaId: String): StreamRef? = refreshRefresherImpl?.invoke(mediaId)
 
         private suspend fun refreshedBaseUrl(mediaId: String): String = metaRegistry.get(mediaId)?.baseUrl ?: ""
 
@@ -288,11 +322,12 @@ class PlayerConnection
 
         private suspend fun awaitController(): MediaController {
             var waited = 0L
-            while (controllerFuture.value == null && waited < 5_000) {
+            while (controllerFuture.value == null && waited < 8_000) {
                 delay(50)
                 waited += 50
             }
-            return controllerFuture.value ?: throw IllegalStateException("media controller not connected")
+            return controllerFuture.value
+                ?: throw IllegalStateException("the player service is still starting - try again in a moment")
         }
 
         fun controllerOrNull(): MediaController? = controllerFuture.value

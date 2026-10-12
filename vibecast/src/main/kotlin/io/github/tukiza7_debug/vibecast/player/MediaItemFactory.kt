@@ -32,11 +32,13 @@ object MediaItemFactory {
         title: String,
         subtitleLabel: String?,
     ): MediaItem {
+        val url = streamRef.url.trim()
+        require(url.isNotEmpty()) { "stream URL is empty (mediaId=$mediaId)" }
         val mimeType = resolveMimeType(streamRef)
         val builder =
             MediaItem.Builder()
                 .setMediaId(mediaId)
-                .setUri(Uri.parse(streamRef.url))
+                .setUri(Uri.parse(url))
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(title)
@@ -46,10 +48,11 @@ object MediaItemFactory {
         if (mimeType != null) {
             builder.setMimeType(mimeType)
         }
-        if (streamRef.subtitles.isNotEmpty()) {
+        val validSubtitles = streamRef.subtitles.filter { it.url.isNotBlank() }
+        if (validSubtitles.isNotEmpty()) {
             val configs =
-                streamRef.subtitles.map { track ->
-                    MediaItem.SubtitleConfiguration.Builder(Uri.parse(track.url))
+                validSubtitles.map { track ->
+                    MediaItem.SubtitleConfiguration.Builder(Uri.parse(track.url.trim()))
                         .setMimeType(media3MimeType(trackMime(track.url)) ?: MimeTypes.TEXT_VTT)
                         .setLanguage(track.language.ifBlank { null })
                         .setLabel(track.label.ifBlank { track.language.ifBlank { "Subtitles" } })
