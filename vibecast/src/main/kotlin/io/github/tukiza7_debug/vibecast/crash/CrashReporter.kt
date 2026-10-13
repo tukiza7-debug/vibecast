@@ -1,9 +1,16 @@
 package io.github.tukiza7_debug.vibecast.crash
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import io.github.tukiza7_debug.vibecast.BuildConfig
+import io.github.tukiza7_debug.vibecast.MainActivity
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -23,6 +30,11 @@ object CrashReporter {
     private const val KEY_LAST_SEEN = "last_seen_ms"
     private const val MAX_REPORT_CHARS = 64_000
 
+    // Notification constants
+    private const val CHANNEL_ID = "vibecast_crashes"
+    private const val CHANNEL_NAME = "VibeCast Crashes"
+    private const val NOTIFICATION_ID = 1001
+
     /** Breadcrumb of the last route the app tried to open (set on detail clicks). */
     @Volatile
     var lastRoute: String? = null
@@ -30,8 +42,10 @@ object CrashReporter {
 
     fun install(context: Context) {
         val appContext = context.applicationContext
+        createNotificationChannel(appContext)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            // Best-effort: write the crash report and post a notification for user.
             runCatching { write(appContext, thread, throwable) }
             previous?.uncaughtException(thread, throwable)
         }
@@ -81,6 +95,8 @@ object CrashReporter {
                 stackTrace = stackTraceOf(throwable),
             )
         File(context.filesDir, FILE_NAME).writeText(report.take(MAX_REPORT_CHARS), Charsets.UTF_8)
+        // Notify the user that a crash occurred and that they can view/share the log
+        runCatching { notifyCrash(context, report) }
     }
 
     internal fun stackTraceOf(throwable: Throwable): String {
@@ -114,4 +130,38 @@ object CrashReporter {
         report: String,
         lines: Int = 12,
     ): String = report.lines().take(lines).joinToString("\n")
+
+    private fun createNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Notifications when the app crashes so users can view diagnostics"
+                }
+                val nm = context.getSystemService(NotificationManager::class.java)
+                nm?.createNotificationChannel(channel)
+            } catch (_: Exception) {
+                // ignore channel creation failures
+            }
+        }
+    }
+
+    private fun notifyCrash(context: Context, report: String) {
+        // Build an intent that opens the app (MainActivity). The app's launch will show the crash dialog.
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT else PendingIntent.FLAG_UPDATE_CURRENT
+        val pendingIntent = PendingIntent.getActivity(context, 0, intent, pendingFlags)
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle("VibeCast crashed")
+            .setContentText("Tap to view crash details")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(preview(report)))
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
+    }
 }
